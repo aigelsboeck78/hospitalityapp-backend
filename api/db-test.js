@@ -3,13 +3,15 @@ export default async function handler(req, res) {
   
   const envInfo = {
     hasPostgresUrl: !!process.env.POSTGRES_URL,
+    hasPostgresPrismaUrl: !!process.env.POSTGRES_PRISMA_URL,
     hasPostgresUrlNonPooling: !!process.env.POSTGRES_URL_NON_POOLING,
     hasDatabaseUrl: !!process.env.DATABASE_URL,
     hasPostgresDatabase: !!process.env.POSTGRES_DATABASE,
     hasPostgresHost: !!process.env.POSTGRES_HOST,
     nodeEnv: process.env.NODE_ENV,
     // Get first few chars of connection strings to verify format
-    postgresUrlFormat: process.env.POSTGRES_URL ? process.env.POSTGRES_URL.substring(0, 20) + '...' : null,
+    postgresUrlFormat: process.env.POSTGRES_URL ? process.env.POSTGRES_URL.substring(0, 50) + '...' : null,
+    postgresPrismaUrlFormat: process.env.POSTGRES_PRISMA_URL ? process.env.POSTGRES_PRISMA_URL.substring(0, 50) + '...' : null,
     databaseUrlFormat: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : null
   };
   
@@ -17,8 +19,12 @@ export default async function handler(req, res) {
   let testResult = 'Not tested';
   let error = null;
   
-  // Use POSTGRES_URL (should be Supabase pooler URL)
-  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  // Try different connection strings in order of preference
+  // POSTGRES_PRISMA_URL has pgbouncer=true which might work better
+  const connectionString = process.env.POSTGRES_PRISMA_URL || 
+                           process.env.POSTGRES_URL || 
+                           process.env.POSTGRES_URL_NON_POOLING ||
+                           process.env.DATABASE_URL;
   
   if (connectionString && !connectionString.includes('[your-')) {
     try {

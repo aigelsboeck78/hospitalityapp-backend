@@ -41,9 +41,11 @@ const runMiddleware = (req, res, fn) => {
 
 // Helper function to create database pool
 const createPool = () => {
-  // Use POSTGRES_URL which should be the Supabase pooler connection
-  // The POSTGRES_URL from Vercel should be: postgres://postgres.ztmvniyhffndcmgvqwgt:...@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=require
-  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  // Try POSTGRES_PRISMA_URL first (has pgbouncer=true), then POSTGRES_URL
+  // Both should be Supabase pooler connections
+  const connectionString = process.env.POSTGRES_PRISMA_URL || 
+                           process.env.POSTGRES_URL || 
+                           process.env.DATABASE_URL;
   
   if (!connectionString) {
     throw new Error('Database configuration error');
