@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install",
+  "buildCommand": "npm install && npm run vercel:build",
   "outputDirectory": ".",
   "framework": null,
   "rewrites": [
