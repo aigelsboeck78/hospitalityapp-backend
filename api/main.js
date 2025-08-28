@@ -285,6 +285,345 @@ export default async function handler(req, res) {
       });
     }
   }
+
+  // Change password
+  if (pathname === '/api/auth/change-password' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      const { currentPassword, newPassword } = req.body;
+      
+      // Get user
+      const userResult = await pool.query(
+        'SELECT password_hash FROM users WHERE id = $1',
+        [decoded.id]
+      );
+      
+      if (userResult.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Verify current password
+      const passwordMatch = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+      
+      if (!passwordMatch) {
+        await pool.end();
+        return res.status(401).json({
+          success: false,
+          message: 'Current password is incorrect'
+        });
+      }
+      
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Update password
+      await pool.query(
+        'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [hashedPassword, decoded.id]
+      );
+      
+      // Log the password change
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, ip_address) 
+         VALUES ($1, $2, $3)`,
+        [decoded.id, 'password_changed', req.headers['x-forwarded-for'] || req.socket?.remoteAddress]
+      );
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Password changed successfully'
+      });
+    } catch (error) {
+      console.error('Change password error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to change password'
+      });
+    }
+  }
+
+  // Get all users (admin only)
+  if (pathname === '/api/users' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      
+      // Check if user is admin
+      if (decoded.role !== 'admin') {
+        await pool.end();
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required'
+        });
+      }
+      
+      const result = await pool.query(
+        'SELECT id, email, username, first_name, last_name, role, is_active, email_verified, last_login, created_at FROM users ORDER BY created_at DESC'
+      );
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Get users error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch users'
+      });
+    }
+  }
+
+  // Create new user (admin only)
+  if (pathname === '/api/users' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      
+      // Check if user is admin
+      if (decoded.role !== 'admin') {
+        await pool.end();
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required'
+        });
+      }
+      
+      const { email, username, password, firstName, lastName, role } = req.body;
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // Create user
+      const result = await pool.query(
+        `INSERT INTO users (email, username, password_hash, first_name, last_name, role, is_active, email_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, email, username, first_name, last_name, role`,
+        [email, username, hashedPassword, firstName || null, lastName || null, role || 'user', true, false]
+      );
+      
+      // Log user creation
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [decoded.id, 'user_created', 'user', result.rows[0].id, req.headers['x-forwarded-for'] || req.socket?.remoteAddress]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Create user error:', error);
+      await pool.end();
+      
+      if (error.code === '23505') {
+        return res.status(400).json({
+          success: false,
+          message: 'Username or email already exists'
+        });
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user'
+      });
+    }
+  }
+
+  // Delete user (admin only)
+  const deleteUserMatch = pathname.match(/^\/api\/users\/([^\/]+)$/);
+  if (deleteUserMatch && method === 'DELETE') {
+    const userId = deleteUserMatch[1];
+    const pool = createPool();
+    
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      
+      // Check if user is admin
+      if (decoded.role !== 'admin') {
+        await pool.end();
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required'
+        });
+      }
+      
+      // Prevent deleting self
+      if (userId === decoded.id) {
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete your own account'
+        });
+      }
+      
+      // Delete user
+      const result = await pool.query(
+        'DELETE FROM users WHERE id = $1 RETURNING username',
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Log deletion
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [decoded.id, 'user_deleted', 'user', userId, req.headers['x-forwarded-for'] || req.socket?.remoteAddress]
+      );
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'User deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete user'
+      });
+    }
+  }
+
+  // Toggle user active status (admin only)
+  const toggleUserMatch = pathname.match(/^\/api\/users\/([^\/]+)\/toggle-active$/);
+  if (toggleUserMatch && method === 'PATCH') {
+    const userId = toggleUserMatch[1];
+    const pool = createPool();
+    
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      
+      // Check if user is admin
+      if (decoded.role !== 'admin') {
+        await pool.end();
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required'
+        });
+      }
+      
+      const { isActive } = req.body;
+      
+      // Update user status
+      const result = await pool.query(
+        'UPDATE users SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING username, is_active',
+        [isActive, userId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Log status change
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          decoded.id, 
+          isActive ? 'user_activated' : 'user_deactivated', 
+          'user', 
+          userId, 
+          { newStatus: isActive },
+          req.headers['x-forwarded-for'] || req.socket?.remoteAddress
+        ]
+      );
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: `User ${isActive ? 'activated' : 'deactivated'} successfully`
+      });
+    } catch (error) {
+      console.error('Toggle user error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update user status'
+      });
+    }
+  }
   
   // Properties list
   if (pathname === '/api/properties' && method === 'GET') {
