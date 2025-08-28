@@ -1312,9 +1312,16 @@ export default async function handler(req, res) {
       );
       await pool.end();
       
+      // Filter out images with invalid /uploads/ paths since they don't exist on Vercel
+      const validImages = result.rows.filter(img => {
+        const url = img.image_url || img.url || img.path;
+        // Only return images with external URLs
+        return url && (url.startsWith('http://') || url.startsWith('https://'));
+      });
+      
       return res.status(200).json({
         success: true,
-        data: result.rows
+        data: validImages
       });
     } catch (error) {
       console.error('Background images fetch error:', error);
@@ -1400,51 +1407,46 @@ export default async function handler(req, res) {
       });
     }
   }
-
-  // Serve uploaded files - GET /uploads/*
-  if (pathname.startsWith('/uploads/') && method === 'GET') {
-    const fs = await import('fs').then(m => m.default);
-    const path = await import('path').then(m => m.default);
-    const { fileURLToPath } = await import('url');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    
-    // Security: prevent path traversal
-    const sanitizedPath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
-    const filePath = path.join(__dirname, '..', sanitizedPath);
-    
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'File not found'
-      });
-    }
-    
-    // Get file extension for content type
-    const ext = path.extname(filePath).toLowerCase();
-    const contentTypes = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp'
-    };
-    
-    const contentType = contentTypes[ext] || 'application/octet-stream';
+  
+  // Cleanup invalid background images - POST /api/property/:id/backgrounds/cleanup
+  const cleanupBackgroundMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds\/cleanup$/);
+  if (cleanupBackgroundMatch && method === 'POST') {
+    const propertyId = cleanupBackgroundMatch[1];
+    const pool = createPool();
     
     try {
-      const fileData = fs.readFileSync(filePath);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-      return res.send(fileData);
+      // Delete all images with /uploads/ paths since they don't exist on Vercel
+      const result = await pool.query(
+        `DELETE FROM background_images 
+         WHERE property_id = $1 
+         AND (image_url LIKE '/uploads/%' OR image_url NOT LIKE 'http%')
+         RETURNING *`,
+        [propertyId]
+      );
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: `Cleaned up ${result.rows.length} invalid background images`,
+        deletedCount: result.rows.length
+      });
     } catch (error) {
-      console.error('Error serving file:', error);
+      console.error('Background image cleanup error:', error);
+      await pool.end();
       return res.status(500).json({
         success: false,
-        message: 'Failed to serve file'
+        message: 'Failed to cleanup background images'
       });
     }
+  }
+
+  // Return 404 for /uploads/* paths - these don't exist on Vercel
+  if (pathname.startsWith('/uploads/') && method === 'GET') {
+    return res.status(404).json({
+      success: false,
+      message: 'File uploads are not supported on Vercel serverless functions. Please use external image URLs instead.'
+    });
   }
   
   // Notifications statistics - /api/notifications/statistics
