@@ -352,6 +352,38 @@ export default async function handler(req, res) {
     }
   }
   
+  // Event statistics - /api/events/stats
+  if (pathname === '/api/events/stats' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(`
+        SELECT 
+          COUNT(*) as total_events,
+          COUNT(CASE WHEN date >= CURRENT_DATE THEN 1 END) as upcoming_events,
+          COUNT(CASE WHEN date < CURRENT_DATE THEN 1 END) as past_events
+        FROM events
+      `);
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0] || {
+          total_events: 0,
+          upcoming_events: 0,
+          past_events: 0
+        }
+      });
+    } catch (error) {
+      console.error('Event stats error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch event statistics'
+      });
+    }
+  }
+  
   // Dining
   if (pathname === '/api/dining' && method === 'GET') {
     const pool = createPool();
@@ -560,6 +592,33 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch MDM alerts'
+      });
+    }
+  }
+  
+  // Background images - /api/property/:id/backgrounds
+  const backgroundImagesMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds$/);
+  if (backgroundImagesMatch && method === 'GET') {
+    const propertyId = backgroundImagesMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'SELECT * FROM background_images WHERE property_id = $1 ORDER BY created_at DESC',
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Background images fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch background images'
       });
     }
   }
