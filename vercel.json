@@ -4,14 +4,6 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/test-events",
-      "destination": "/api/test-events"
-    },
-    {
-      "source": "/list-tables",
-      "destination": "/api/list-tables"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
@@ -20,14 +12,6 @@
     "api/main.js": {
       "maxDuration": 10,
       "memory": 512
-    },
-    "api/test-events.js": {
-      "maxDuration": 10,
-      "memory": 256
-    },
-    "api/list-tables.js": {
-      "maxDuration": 10,
-      "memory": 256
     }
   },
   "env": {

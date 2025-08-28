@@ -423,17 +423,10 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
-      const { property_id } = req.query || {};
-      let query = 'SELECT * FROM dining';
-      let params = [];
+      // The table is actually named dining_places
+      const query = 'SELECT * FROM dining_places ORDER BY created_at DESC';
       
-      if (property_id) {
-        query += ' WHERE property_id = $1';
-        params.push(property_id);
-      }
-      query += ' ORDER BY created_at DESC';
-      
-      const result = await pool.query(query, params);
+      const result = await pool.query(query);
       await pool.end();
       
       return res.status(200).json({
