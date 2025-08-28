@@ -30,14 +30,21 @@ export default async function handler(req, res) {
     try {
       const { Pool } = await import('pg');
       
-      // Check if SSL is required in connection string
-      const needsSSL = connectionString.includes('sslmode=require');
-      const sslConfig = needsSSL || process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false;
-        
+      // For Supabase with sslmode in URL, we need to handle SSL differently
+      // Remove sslmode from connection string and handle it separately
+      let cleanConnectionString = connectionString;
+      let sslConfig = false;
+      
+      if (connectionString.includes('sslmode=require')) {
+        // SSL is required, use it but don't reject unauthorized
+        sslConfig = {
+          rejectUnauthorized: false,
+          require: true
+        };
+      }
+      
       const pool = new Pool({
-        connectionString,
+        connectionString: cleanConnectionString,
         ssl: sslConfig,
         connectionTimeoutMillis: 10000
       });

@@ -51,12 +51,16 @@ const createPool = () => {
     throw new Error('Database configuration error');
   }
   
-  // For Supabase, use SSL with rejectUnauthorized based on connection string
-  // If sslmode=require is in the URL, SSL is already configured
-  const needsSSL = connectionString.includes('sslmode=require');
-  const sslConfig = needsSSL || process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false;
+  // For Supabase, handle SSL properly
+  let sslConfig = false;
+  
+  if (connectionString.includes('sslmode=require') || process.env.NODE_ENV === 'production') {
+    // Use SSL but don't reject unauthorized certificates
+    sslConfig = {
+      rejectUnauthorized: false,
+      require: true
+    };
+  }
   
   return new Pool({
     connectionString,
