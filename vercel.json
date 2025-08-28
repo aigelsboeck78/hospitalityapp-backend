@@ -4,12 +4,20 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "destination": "/api/app"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
     }
   ],
   "functions": {
     "api/app.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "api/index.js": {
       "maxDuration": 30,
       "memory": 1024
     }
