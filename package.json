@@ -1,0 +1,48 @@
+{
+  "name": "vacation-rental-backend",
+  "version": "1.0.0",
+  "description": "Backend API for vacation rental hospitality system",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "migrate": "node src/database/migrate.js",
+    "seed": "node src/database/seed.js",
+    "test": "jest",
+    "db:init": "node scripts/init-vercel-db.js",
+    "db:seed": "node scripts/seed-data.js",
+    "db:migrate": "node scripts/run-migrations.js",
+    "vercel:build": "npm run db:init"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bcrypt": "^5.1.1",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.10.0",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.2",
+    "pg": "^8.11.3",
+    "sharp": "^0.33.2",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.0",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.3",
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm install",
+  "outputDirectory": ".",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/app"
+    }
+  ],
+  "functions": {
+    "api/app.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
