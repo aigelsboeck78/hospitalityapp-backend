@@ -12,6 +12,14 @@
       "destination": "/api/auth/login"
     },
     {
+      "source": "/api/properties",
+      "destination": "/api/properties"
+    },
+    {
+      "source": "/api/guests",
+      "destination": "/api/guests"
+    },
+    {
       "source": "/test",
       "destination": "/api/test"
     }
@@ -24,6 +32,14 @@
     "api/auth/login.js": {
       "maxDuration": 10,
       "memory": 128
+    },
+    "api/properties.js": {
+      "maxDuration": 10,
+      "memory": 256
+    },
+    "api/guests.js": {
+      "maxDuration": 10,
+      "memory": 256
     },
     "api/test.js": {
       "maxDuration": 10,
