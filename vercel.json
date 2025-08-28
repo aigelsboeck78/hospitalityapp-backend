@@ -4,6 +4,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/test",
+      "destination": "/api/test"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/serverless"
     }
@@ -12,6 +16,10 @@
     "api/serverless.js": {
       "maxDuration": 30,
       "memory": 1024
+    },
+    "api/test.js": {
+      "maxDuration": 30,
+      "memory": 512
     }
   },
   "env": {
