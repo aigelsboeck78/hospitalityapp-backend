@@ -4,70 +4,14 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/api/health",
-      "destination": "/api/health"
-    },
-    {
-      "source": "/api/auth/login",
-      "destination": "/api/auth/login"
-    },
-    {
-      "source": "/api/auth/verify",
-      "destination": "/api/auth/verify"
-    },
-    {
-      "source": "/api/properties",
-      "destination": "/api/properties"
-    },
-    {
-      "source": "/api/properties-debug",
-      "destination": "/api/properties-debug"
-    },
-    {
-      "source": "/api/guests",
-      "destination": "/api/guests"
-    },
-    {
-      "source": "/api/cleanup/status",
-      "destination": "/api/cleanup/status"
-    },
-    {
-      "source": "/test",
-      "destination": "/api/test"
+      "source": "/api/(.*)",
+      "destination": "/api/main"
     }
   ],
   "functions": {
-    "api/health.js": {
+    "api/main.js": {
       "maxDuration": 10,
-      "memory": 128
-    },
-    "api/auth/login.js": {
-      "maxDuration": 10,
-      "memory": 128
-    },
-    "api/auth/verify.js": {
-      "maxDuration": 10,
-      "memory": 128
-    },
-    "api/properties.js": {
-      "maxDuration": 10,
-      "memory": 256
-    },
-    "api/properties-debug.js": {
-      "maxDuration": 10,
-      "memory": 256
-    },
-    "api/guests.js": {
-      "maxDuration": 10,
-      "memory": 256
-    },
-    "api/cleanup/status.js": {
-      "maxDuration": 10,
-      "memory": 128
-    },
-    "api/test.js": {
-      "maxDuration": 10,
-      "memory": 128
+      "memory": 512
     }
   },
   "env": {
