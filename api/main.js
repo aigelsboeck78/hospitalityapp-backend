@@ -1095,6 +1095,167 @@ export default async function handler(req, res) {
     }
   }
   
+  // Proxy endpoint for fetching external images - /api/proxy/image
+  if (pathname === '/api/proxy/image' && method === 'GET') {
+    try {
+      const authHeader = req.headers['authorization'];
+      if (!authHeader) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const token = authHeader.replace('Bearer ', '');
+      
+      try {
+        jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      } catch (error) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid token'
+        });
+      }
+      
+      const { url } = req.query;
+      
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          message: 'URL parameter is required'
+        });
+      }
+      
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid URL format'
+        });
+      }
+      
+      // Fetch the image from the external URL
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VacationRentalBot/1.0)',
+        },
+        timeout: 10000, // 10 second timeout
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      
+      // Validate that it's an image
+      if (!contentType || !contentType.startsWith('image/')) {
+        return res.status(400).json({
+          success: false,
+          message: 'URL does not point to an image'
+        });
+      }
+      
+      // Get the image buffer
+      const buffer = await response.arrayBuffer();
+      
+      // Set appropriate headers
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      // Send the image
+      return res.send(Buffer.from(buffer));
+      
+    } catch (error) {
+      console.error('Error proxying image:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch image',
+        error: error.message
+      });
+    }
+  }
+  
+  // Check image endpoint - /api/check-image
+  if (pathname === '/api/check-image' && method === 'POST') {
+    try {
+      const authHeader = req.headers['authorization'];
+      if (!authHeader) {
+        return res.status(401).json({
+          success: false,
+          message: 'No token provided'
+        });
+      }
+      
+      const token = authHeader.replace('Bearer ', '');
+      
+      try {
+        jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
+      } catch (error) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid token'
+        });
+      }
+      
+      const { url } = req.body;
+      
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          message: 'URL is required'
+        });
+      }
+      
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid URL format'
+        });
+      }
+      
+      // Try to fetch the image headers
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VacationRentalBot/1.0)',
+        },
+        timeout: 5000, // 5 second timeout
+      });
+      
+      const contentType = response.headers.get('content-type');
+      const isImage = contentType && contentType.startsWith('image/');
+      
+      return res.json({
+        success: true,
+        data: {
+          accessible: response.ok,
+          isImage: isImage,
+          contentType: contentType,
+          statusCode: response.status,
+          proxiedUrl: response.ok && isImage ? `/api/proxy/image?url=${encodeURIComponent(url)}` : null
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error checking image:', error);
+      return res.json({
+        success: false,
+        data: {
+          accessible: false,
+          isImage: false,
+          error: error.message
+        }
+      });
+    }
+  }
+  
   // Default 404
   return res.status(404).json({
     success: false,
