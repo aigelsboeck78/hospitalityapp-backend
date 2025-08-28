@@ -700,6 +700,76 @@ export default async function handler(req, res) {
     }
   }
 
+  // Create new guest - POST /api/guests
+  if (pathname === '/api/guests' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { 
+        name, 
+        property_id,
+        email,
+        phone,
+        check_in_date,
+        check_out_date,
+        welcome_message,
+        special_requests,
+        guest_type = 'family',
+        party_size,
+        number_of_adults,
+        number_of_children,
+        allergies,
+        preferences,
+        is_active = true
+      } = req.body;
+      
+      // Parse name into first and last name if provided as full name
+      let firstName, lastName;
+      if (name) {
+        const nameParts = name.split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      }
+      
+      const result = await pool.query(
+        `INSERT INTO guests (
+          first_name, last_name, property_id, email, phone,
+          check_in_date, check_out_date, special_requests,
+          guest_type, party_size, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        [
+          firstName || 'Guest',
+          lastName || 'User',
+          property_id,
+          email,
+          phone,
+          check_in_date,
+          check_out_date,
+          special_requests || welcome_message,
+          guest_type,
+          party_size || number_of_adults || 1,
+          is_active
+        ]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Guest create error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create guest',
+        error: error.message
+      });
+    }
+  }
+
   // Single guest by ID - /api/guests/:id
   const singleGuestMatch = pathname.match(/^\/api\/guests\/([^\/]+)$/);
   if (singleGuestMatch && method === 'GET') {
@@ -739,16 +809,62 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
-      const { name, propertyId, checkIn, checkOut, welcomeMessage, imageUrl, language, status } = req.body;
+      const { 
+        name, 
+        property_id,
+        email,
+        phone,
+        check_in_date,
+        check_out_date,
+        welcome_message,
+        special_requests,
+        guest_type,
+        party_size,
+        number_of_adults,
+        number_of_children,
+        allergies,
+        preferences,
+        is_active
+      } = req.body;
+      
+      // Parse name into first and last name if provided as full name
+      let firstName, lastName;
+      if (name) {
+        const nameParts = name.split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      }
       
       const result = await pool.query(
         `UPDATE guests 
-         SET name = $1, property_id = $2, check_in = $3, check_out = $4, 
-             welcome_message = $5, image_url = $6, language = $7, status = $8,
+         SET first_name = COALESCE($1, first_name),
+             last_name = COALESCE($2, last_name),
+             property_id = COALESCE($3, property_id),
+             email = COALESCE($4, email),
+             phone = COALESCE($5, phone),
+             check_in_date = COALESCE($6, check_in_date),
+             check_out_date = COALESCE($7, check_out_date),
+             special_requests = COALESCE($8, special_requests),
+             guest_type = COALESCE($9, guest_type),
+             party_size = COALESCE($10, party_size),
+             is_active = COALESCE($11, is_active),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $9
+         WHERE id = $12
          RETURNING *`,
-        [name, propertyId, checkIn, checkOut, welcomeMessage, imageUrl, language, status, guestId]
+        [
+          firstName,
+          lastName,
+          property_id,
+          email,
+          phone,
+          check_in_date,
+          check_out_date,
+          special_requests || welcome_message,
+          guest_type,
+          party_size || number_of_adults,
+          is_active !== undefined ? is_active : true,
+          guestId
+        ]
       );
       
       if (result.rows.length === 0) {
