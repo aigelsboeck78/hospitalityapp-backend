@@ -1315,8 +1315,12 @@ export default async function handler(req, res) {
       // Filter out images with invalid /uploads/ paths since they don't exist on Vercel
       const validImages = result.rows.filter(img => {
         const url = img.image_url || img.url || img.path;
-        // Only return images with external URLs
-        return url && (url.startsWith('http://') || url.startsWith('https://'));
+        // Return images with external URLs or base64 data URLs
+        return url && (
+          url.startsWith('http://') || 
+          url.startsWith('https://') || 
+          url.startsWith('data:image/')
+        );
       });
       
       return res.status(200).json({
@@ -1339,21 +1343,113 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
-      const { imageUrl, title, season = 'all', uploadType = 'url' } = req.body;
+      let imageDataUrl = null;
+      let title = null;
+      let season = 'all';
+      let uploadType = 'url';
       
-      if (!imageUrl) {
-        await pool.end();
-        return res.status(400).json({
-          success: false,
-          message: 'Image URL is required'
-        });
+      // Check if this is a multipart form upload
+      const contentType = req.headers['content-type'] || '';
+      
+      if (contentType.includes('multipart/form-data')) {
+        // Parse multipart form data
+        const boundary = contentType.split('boundary=')[1];
+        if (!boundary) {
+          await pool.end();
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid multipart form data'
+          });
+        }
+        
+        // Read the body as buffer
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        // Parse multipart data manually (simple implementation)
+        const parts = buffer.toString('binary').split(`--${boundary}`);
+        
+        for (const part of parts) {
+          if (part.includes('Content-Disposition: form-data')) {
+            if (part.includes('name="background"') || part.includes('name="file"')) {
+              // This is the file part
+              const headerEndIndex = part.indexOf('\r\n\r\n');
+              if (headerEndIndex !== -1) {
+                const headers = part.substring(0, headerEndIndex);
+                const fileData = part.substring(headerEndIndex + 4);
+                
+                // Extract content type
+                let mimeType = 'image/jpeg';
+                const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+                if (contentTypeMatch) {
+                  mimeType = contentTypeMatch[1].trim();
+                }
+                
+                // Remove trailing boundary markers
+                const endBoundaryIndex = fileData.lastIndexOf('\r\n');
+                const cleanFileData = endBoundaryIndex > 0 ? fileData.substring(0, endBoundaryIndex) : fileData;
+                
+                // Convert to base64 data URL
+                const base64 = Buffer.from(cleanFileData, 'binary').toString('base64');
+                imageDataUrl = `data:${mimeType};base64,${base64}`;
+                uploadType = 'file';
+                
+                // Check size limit (4MB after base64 encoding)
+                if (imageDataUrl.length > 4 * 1024 * 1024) {
+                  await pool.end();
+                  return res.status(413).json({
+                    success: false,
+                    message: 'Image too large. Please reduce file size to under 3MB'
+                  });
+                }
+              }
+            } else if (part.includes('name="season"')) {
+              const valueMatch = part.match(/\r\n\r\n([^\r\n]*)/);
+              if (valueMatch) {
+                season = valueMatch[1].trim();
+              }
+            } else if (part.includes('name="title"')) {
+              const valueMatch = part.match(/\r\n\r\n([^\r\n]*)/);
+              if (valueMatch) {
+                title = valueMatch[1].trim();
+              }
+            }
+          }
+        }
+        
+        if (!imageDataUrl) {
+          await pool.end();
+          return res.status(400).json({
+            success: false,
+            message: 'No image file provided'
+          });
+        }
+      } else {
+        // Handle JSON request (URL upload)
+        const { imageUrl, title: jsonTitle, season: jsonSeason = 'all', uploadType: jsonUploadType = 'url' } = req.body;
+        
+        if (!imageUrl) {
+          await pool.end();
+          return res.status(400).json({
+            success: false,
+            message: 'Image URL is required'
+          });
+        }
+        
+        imageDataUrl = imageUrl;
+        title = jsonTitle;
+        season = jsonSeason;
+        uploadType = jsonUploadType;
       }
       
       const result = await pool.query(
         `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [propertyId, imageUrl, title, season, uploadType]
+        [propertyId, imageDataUrl, title, season, uploadType]
       );
       
       await pool.end();
@@ -1416,10 +1512,11 @@ export default async function handler(req, res) {
     
     try {
       // Delete all images with /uploads/ paths since they don't exist on Vercel
+      // Keep base64 data URLs and external URLs
       const result = await pool.query(
         `DELETE FROM background_images 
          WHERE property_id = $1 
-         AND (image_url LIKE '/uploads/%' OR image_url NOT LIKE 'http%')
+         AND image_url LIKE '/uploads/%'
          RETURNING *`,
         [propertyId]
       );
