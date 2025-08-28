@@ -12,8 +12,16 @@
       "destination": "/api/auth/login"
     },
     {
+      "source": "/api/auth/verify",
+      "destination": "/api/auth/verify"
+    },
+    {
       "source": "/api/properties",
       "destination": "/api/properties"
+    },
+    {
+      "source": "/api/properties-debug",
+      "destination": "/api/properties-debug"
     },
     {
       "source": "/api/guests",
@@ -37,7 +45,15 @@
       "maxDuration": 10,
       "memory": 128
     },
+    "api/auth/verify.js": {
+      "maxDuration": 10,
+      "memory": 128
+    },
     "api/properties.js": {
+      "maxDuration": 10,
+      "memory": 256
+    },
+    "api/properties-debug.js": {
       "maxDuration": 10,
       "memory": 256
     },

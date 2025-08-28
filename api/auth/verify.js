@@ -1,7 +1,5 @@
-import pg from 'pg';
 import cors from 'cors';
-
-const { Pool } = pg;
+import jwt from 'jsonwebtoken';
 
 const allowedOrigins = [
   'https://hospitalityapp.chaletmoments.com',
@@ -19,7 +17,10 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
 };
 
 const corsMiddleware = cors(corsOptions);
@@ -45,37 +46,28 @@ export default async function handler(req, res) {
     });
   }
   
-  // Use POSTGRES_URL for Vercel Postgres (pooling connection)
-  const connectionString = process.env.POSTGRES_URL || 
-                           process.env.DATABASE_URL;
-  
-  if (!connectionString) {
-    return res.status(500).json({
-      success: false,
-      message: 'Database configuration error'
-    });
-  }
-  
-  const pool = new Pool({
-    connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    connectionTimeoutMillis: 5000
-  });
-  
   try {
-    const result = await pool.query('SELECT * FROM guests ORDER BY created_at DESC');
-    await pool.end();
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided'
+      });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-for-dev');
     
     return res.status(200).json({
       success: true,
-      data: result.rows
+      data: decoded
     });
   } catch (error) {
-    console.error('Guests fetch error:', error);
-    await pool.end();
-    return res.status(500).json({
+    console.error('Token verification error:', error);
+    return res.status(403).json({
       success: false,
-      message: 'Failed to fetch guests'
+      message: 'Invalid or expired token'
     });
   }
 }
