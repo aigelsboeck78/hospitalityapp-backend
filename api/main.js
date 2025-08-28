@@ -366,17 +366,10 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
-      const { property_id } = req.query || {};
-      let query = 'SELECT * FROM events';
-      let params = [];
+      // Events table doesn't have property_id column, fetch all events
+      const query = 'SELECT * FROM events ORDER BY start_date DESC';
       
-      if (property_id) {
-        query += ' WHERE property_id = $1';
-        params.push(property_id);
-      }
-      query += ' ORDER BY date DESC';
-      
-      const result = await pool.query(query, params);
+      const result = await pool.query(query);
       await pool.end();
       
       return res.status(200).json({
@@ -401,8 +394,8 @@ export default async function handler(req, res) {
       const result = await pool.query(`
         SELECT 
           COUNT(*) as total_events,
-          COUNT(CASE WHEN date >= CURRENT_DATE THEN 1 END) as upcoming_events,
-          COUNT(CASE WHEN date < CURRENT_DATE THEN 1 END) as past_events
+          COUNT(CASE WHEN start_date >= CURRENT_DATE THEN 1 END) as upcoming_events,
+          COUNT(CASE WHEN start_date < CURRENT_DATE THEN 1 END) as past_events
         FROM events
       `);
       await pool.end();

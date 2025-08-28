@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       };
     }
     
-    // Try to describe the table
+    // Try to describe events table
     let tableInfo = null;
     try {
       tableInfo = await pool.query(`
@@ -56,6 +56,26 @@ export default async function handler(req, res) {
       // Ignore
     }
     
+    // Also check dining table
+    let diningInfo = null;
+    let diningResult = null;
+    let diningError = null;
+    try {
+      diningInfo = await pool.query(`
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'dining'
+        ORDER BY ordinal_position
+      `);
+      
+      diningResult = await pool.query('SELECT COUNT(*) as count FROM dining');
+    } catch (err) {
+      diningError = {
+        message: err.message,
+        code: err.code
+      };
+    }
+    
     await pool.end();
     
     return res.status(200).json({
@@ -65,7 +85,12 @@ export default async function handler(req, res) {
         count: eventsResult.rows[0].count
       } : null,
       eventsError,
-      tableColumns: tableInfo ? tableInfo.rows : null
+      tableColumns: tableInfo ? tableInfo.rows : null,
+      diningTable: diningResult ? {
+        count: diningResult.rows[0].count
+      } : null,
+      diningColumns: diningInfo ? diningInfo.rows : null,
+      diningError
     });
     
   } catch (error) {
