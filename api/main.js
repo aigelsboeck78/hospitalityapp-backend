@@ -333,8 +333,9 @@ export default async function handler(req, res) {
       const result = await pool.query(
         `SELECT * FROM guests 
          WHERE property_id = $1 
-           AND checked_in = true 
-           AND (checked_out = false OR checked_out IS NULL)
+           AND is_active = true 
+           AND check_in_date <= NOW() 
+           AND check_out_date > NOW()
          ORDER BY check_in_date DESC 
          LIMIT 1`,
         [propertyId]
