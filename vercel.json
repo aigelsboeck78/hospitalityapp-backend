@@ -8,6 +8,10 @@
       "destination": "/api/test-events"
     },
     {
+      "source": "/list-tables",
+      "destination": "/api/list-tables"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
@@ -18,6 +22,10 @@
       "memory": 512
     },
     "api/test-events.js": {
+      "maxDuration": 10,
+      "memory": 256
+    },
+    "api/list-tables.js": {
       "maxDuration": 10,
       "memory": 256
     }
