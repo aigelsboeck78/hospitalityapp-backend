@@ -27,7 +27,7 @@ import kioskPresetRoutes from '../src/routes/kioskPresets.js';
 import scoringRoutes from '../src/routes/scoring.js';
 
 // Import middleware
-import { errorHandler, notFound } from '../src/middleware/errorHandler.js';
+import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Load environment variables
 dotenv.config();
