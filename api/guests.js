@@ -45,9 +45,15 @@ export default async function handler(req, res) {
     });
   }
   
+  // Use POSTGRES_URL_NON_POOLING for Vercel serverless functions
+  const connectionString = process.env.POSTGRES_URL_NON_POOLING || 
+                           process.env.POSTGRES_URL || 
+                           process.env.DATABASE_URL;
+  
   const pool = new Pool({
-    connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    connectionString,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 1 // Serverless functions should use a single connection
   });
   
   try {

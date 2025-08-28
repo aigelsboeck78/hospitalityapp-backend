@@ -1,7 +1,4 @@
-import pg from 'pg';
 import cors from 'cors';
-
-const { Pool } = pg;
 
 const allowedOrigins = [
   'https://hospitalityapp.chaletmoments.com',
@@ -45,31 +42,19 @@ export default async function handler(req, res) {
     });
   }
   
-  // Use POSTGRES_URL_NON_POOLING for Vercel serverless functions
-  const connectionString = process.env.POSTGRES_URL_NON_POOLING || 
-                           process.env.POSTGRES_URL || 
-                           process.env.DATABASE_URL;
-  
-  const pool = new Pool({
-    connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    max: 1 // Serverless functions should use a single connection
+  // Return a mock cleanup status for serverless environment
+  // In serverless, we don't have persistent background processes
+  return res.status(200).json({
+    success: true,
+    data: {
+      isRunning: false,
+      lastRun: new Date().toISOString(),
+      nextRun: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      interval: 3600000,
+      stats: {
+        lastCleanupCount: 0,
+        totalCleanupsPerformed: 0
+      }
+    }
   });
-  
-  try {
-    const result = await pool.query('SELECT * FROM properties ORDER BY created_at DESC');
-    await pool.end();
-    
-    return res.status(200).json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Properties fetch error:', error);
-    await pool.end();
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch properties'
-    });
-  }
 }

@@ -20,6 +20,10 @@
       "destination": "/api/guests"
     },
     {
+      "source": "/api/cleanup/status",
+      "destination": "/api/cleanup/status"
+    },
+    {
       "source": "/test",
       "destination": "/api/test"
     }
@@ -40,6 +44,10 @@
     "api/guests.js": {
       "maxDuration": 10,
       "memory": 256
+    },
+    "api/cleanup/status.js": {
+      "maxDuration": 10,
+      "memory": 128
     },
     "api/test.js": {
       "maxDuration": 10,
