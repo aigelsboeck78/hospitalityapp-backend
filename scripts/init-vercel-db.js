@@ -12,8 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function initDatabase() {
-  // Use Vercel Postgres URL or fallback to standard DATABASE_URL
-  const connectionString = process.env.POSTGRES_URL || 
+  // Use POSTGRES_PRISMA_URL for Supabase with proper SSL handling
+  const connectionString = process.env.POSTGRES_PRISMA_URL || 
+                          process.env.POSTGRES_URL || 
                           process.env.DATABASE_URL || 
                           `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 

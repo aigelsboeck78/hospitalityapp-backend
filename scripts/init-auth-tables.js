@@ -13,8 +13,11 @@ async function initAuthTables() {
   
   if (!connectionString) {
     console.error('❌ No database connection string found');
+    console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE')));
     process.exit(1);
   }
+
+  console.log('Using connection string:', connectionString.replace(/:[^:@]+@/, ':***@'));
 
   const pool = new Pool({
     connectionString,
