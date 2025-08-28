@@ -17,11 +17,14 @@ export default async function handler(req, res) {
   let testResult = 'Not tested';
   let error = null;
   
-  if (process.env.POSTGRES_URL) {
+  // Try DATABASE_URL first (Supabase), then POSTGRES_URL (Vercel Postgres)
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  
+  if (connectionString) {
     try {
       const { Pool } = await import('pg');
       const pool = new Pool({
-        connectionString: process.env.POSTGRES_URL,
+        connectionString,
         ssl: { rejectUnauthorized: false },
         connectionTimeoutMillis: 5000
       });

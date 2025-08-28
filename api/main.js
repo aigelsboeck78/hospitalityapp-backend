@@ -41,7 +41,8 @@ const runMiddleware = (req, res, fn) => {
 
 // Helper function to create database pool
 const createPool = () => {
-  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  // Prioritize DATABASE_URL (Supabase) over POSTGRES_URL (Vercel Postgres)
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   
   if (!connectionString) {
     throw new Error('Database configuration error');
