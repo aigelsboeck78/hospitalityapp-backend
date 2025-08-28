@@ -4,6 +4,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/test-events",
+      "destination": "/api/test-events"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
@@ -12,6 +16,10 @@
     "api/main.js": {
       "maxDuration": 10,
       "memory": 512
+    },
+    "api/test-events.js": {
+      "maxDuration": 10,
+      "memory": 256
     }
   },
   "env": {
