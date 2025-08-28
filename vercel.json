@@ -4,10 +4,6 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/db-test",
-      "destination": "/api/db-test"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
@@ -16,10 +12,6 @@
     "api/main.js": {
       "maxDuration": 10,
       "memory": 512
-    },
-    "api/db-test.js": {
-      "maxDuration": 10,
-      "memory": 256
     }
   },
   "env": {
