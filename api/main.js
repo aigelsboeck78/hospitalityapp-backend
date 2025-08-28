@@ -1076,7 +1076,7 @@ export default async function handler(req, res) {
     }
   }
   
-  // Background images - /api/property/:id/backgrounds
+  // Background images - GET /api/property/:id/backgrounds
   const backgroundImagesMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds$/);
   if (backgroundImagesMatch && method === 'GET') {
     const propertyId = backgroundImagesMatch[1];
@@ -1099,6 +1099,127 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch background images'
+      });
+    }
+  }
+
+  // Upload background image - POST /api/property/:id/backgrounds  
+  if (backgroundImagesMatch && method === 'POST') {
+    const propertyId = backgroundImagesMatch[1];
+    const pool = createPool();
+    
+    try {
+      const { imageUrl, title, season = 'all', uploadType = 'url' } = req.body;
+      
+      if (!imageUrl) {
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'Image URL is required'
+        });
+      }
+      
+      const result = await pool.query(
+        `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [propertyId, imageUrl, title, season, uploadType]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Background image upload error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to upload background image'
+      });
+    }
+  }
+
+  // Delete background image - DELETE /api/property/:id/backgrounds/:imageId
+  const deleteBackgroundMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds\/([^\/]+)$/);
+  if (deleteBackgroundMatch && method === 'DELETE') {
+    const [, propertyId, imageId] = deleteBackgroundMatch;
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'DELETE FROM background_images WHERE id = $1 AND property_id = $2 RETURNING *',
+        [imageId, propertyId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Background image not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Background image deleted successfully'
+      });
+    } catch (error) {
+      console.error('Background image delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete background image'
+      });
+    }
+  }
+
+  // Serve uploaded files - GET /uploads/*
+  if (pathname.startsWith('/uploads/') && method === 'GET') {
+    const fs = await import('fs').then(m => m.default);
+    const path = await import('path').then(m => m.default);
+    const { fileURLToPath } = await import('url');
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    
+    // Security: prevent path traversal
+    const sanitizedPath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
+    const filePath = path.join(__dirname, '..', sanitizedPath);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'File not found'
+      });
+    }
+    
+    // Get file extension for content type
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    };
+    
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+    
+    try {
+      const fileData = fs.readFileSync(filePath);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      return res.send(fileData);
+    } catch (error) {
+      console.error('Error serving file:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to serve file'
       });
     }
   }
