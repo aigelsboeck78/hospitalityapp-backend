@@ -4,22 +4,30 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/test",
-      "destination": "/api/test"
+      "source": "/api/health",
+      "destination": "/api/health"
     },
     {
-      "source": "/(.*)",
-      "destination": "/api/serverless"
+      "source": "/api/auth/login",
+      "destination": "/api/auth/login"
+    },
+    {
+      "source": "/test",
+      "destination": "/api/test"
     }
   ],
   "functions": {
-    "api/serverless.js": {
-      "maxDuration": 30,
-      "memory": 1024
+    "api/health.js": {
+      "maxDuration": 10,
+      "memory": 128
+    },
+    "api/auth/login.js": {
+      "maxDuration": 10,
+      "memory": 128
     },
     "api/test.js": {
-      "maxDuration": 30,
-      "memory": 512
+      "maxDuration": 10,
+      "memory": 128
     }
   },
   "env": {
