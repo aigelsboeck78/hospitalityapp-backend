@@ -83,7 +83,17 @@ export default async function handler(req, res) {
   await runMiddleware(req, res, corsMiddleware);
   
   const { url, method } = req;
-  const pathname = url.split('?')[0];
+  const [pathname, queryString] = url.split('?');
+  
+  // Parse query parameters
+  const query = {};
+  if (queryString) {
+    const params = new URLSearchParams(queryString);
+    for (const [key, value] of params) {
+      query[key] = value;
+    }
+  }
+  req.query = query;
   
   // Health check
   if (pathname === '/api/health' && method === 'GET') {
@@ -288,7 +298,7 @@ export default async function handler(req, res) {
     });
   }
   
-  // Activities
+  // Activities list
   if (pathname === '/api/activities' && method === 'GET') {
     const pool = createPool();
     
@@ -316,6 +326,37 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch activities'
+      });
+    }
+  }
+  
+  // Single activity - /api/activities/:id
+  const singleActivityMatch = pathname.match(/^\/api\/activities\/([^\/]+)$/);
+  if (singleActivityMatch && method === 'GET') {
+    const activityId = singleActivityMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('SELECT * FROM activities WHERE id = $1', [activityId]);
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Activity not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Activity fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch activity'
       });
     }
   }
