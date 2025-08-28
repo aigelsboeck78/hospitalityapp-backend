@@ -678,7 +678,7 @@ export default async function handler(req, res) {
     }
   }
   
-  // Guests
+  // Guests - all
   if (pathname === '/api/guests' && method === 'GET') {
     const pool = createPool();
     
@@ -696,6 +696,113 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch guests'
+      });
+    }
+  }
+
+  // Single guest by ID - /api/guests/:id
+  const singleGuestMatch = pathname.match(/^\/api\/guests\/([^\/]+)$/);
+  if (singleGuestMatch && method === 'GET') {
+    const guestId = singleGuestMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('SELECT * FROM guests WHERE id = $1', [guestId]);
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Guest not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Guest fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch guest'
+      });
+    }
+  }
+
+  // Update guest - PUT /api/guests/:id
+  if (singleGuestMatch && method === 'PUT') {
+    const guestId = singleGuestMatch[1];
+    const pool = createPool();
+    
+    try {
+      const { name, propertyId, checkIn, checkOut, welcomeMessage, imageUrl, language, status } = req.body;
+      
+      const result = await pool.query(
+        `UPDATE guests 
+         SET name = $1, property_id = $2, check_in = $3, check_out = $4, 
+             welcome_message = $5, image_url = $6, language = $7, status = $8,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $9
+         RETURNING *`,
+        [name, propertyId, checkIn, checkOut, welcomeMessage, imageUrl, language, status, guestId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Guest not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Guest update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update guest'
+      });
+    }
+  }
+
+  // Delete guest - DELETE /api/guests/:id
+  if (singleGuestMatch && method === 'DELETE') {
+    const guestId = singleGuestMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('DELETE FROM guests WHERE id = $1 RETURNING *', [guestId]);
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Guest not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Guest deleted successfully'
+      });
+    } catch (error) {
+      console.error('Guest delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete guest'
       });
     }
   }
