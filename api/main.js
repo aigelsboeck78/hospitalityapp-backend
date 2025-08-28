@@ -47,10 +47,19 @@ const createPool = () => {
     throw new Error('Database configuration error');
   }
   
+  // For Vercel Postgres, we need specific SSL settings
+  const sslConfig = process.env.NODE_ENV === 'production' 
+    ? {
+        rejectUnauthorized: false
+      }
+    : false;
+  
   return new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    connectionTimeoutMillis: 5000
+    ssl: sslConfig,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 1000,
+    max: 1 // Serverless should use single connection
   });
 };
 
