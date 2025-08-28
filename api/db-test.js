@@ -17,23 +17,41 @@ export default async function handler(req, res) {
   let testResult = 'Not tested';
   let error = null;
   
-  // Try DATABASE_URL first (Supabase), then POSTGRES_URL (Vercel Postgres)
-  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  // Use POSTGRES_URL (should be Supabase pooler URL)
+  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   
-  if (connectionString) {
+  if (connectionString && !connectionString.includes('[your-')) {
     try {
       const { Pool } = await import('pg');
+      
+      // Check if SSL is required in connection string
+      const needsSSL = connectionString.includes('sslmode=require');
+      const sslConfig = needsSSL || process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false;
+        
       const pool = new Pool({
         connectionString,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 5000
+        ssl: sslConfig,
+        connectionTimeoutMillis: 10000
       });
       
       const result = await pool.query('SELECT NOW() as current_time, version() as pg_version');
+      
+      // Also check if we can query the properties table
+      let tableCheck = null;
+      try {
+        const tableResult = await pool.query('SELECT COUNT(*) as count FROM properties');
+        tableCheck = { propertiesCount: tableResult.rows[0].count };
+      } catch (tableErr) {
+        tableCheck = { error: tableErr.message };
+      }
+      
       testResult = {
         connected: true,
         currentTime: result.rows[0].current_time,
-        version: result.rows[0].pg_version
+        version: result.rows[0].pg_version,
+        tableCheck
       };
       await pool.end();
     } catch (err) {

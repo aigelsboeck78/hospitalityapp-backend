@@ -41,24 +41,25 @@ const runMiddleware = (req, res, fn) => {
 
 // Helper function to create database pool
 const createPool = () => {
-  // Prioritize DATABASE_URL (Supabase) over POSTGRES_URL (Vercel Postgres)
-  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  // Use POSTGRES_URL which should be the Supabase pooler connection
+  // The POSTGRES_URL from Vercel should be: postgres://postgres.ztmvniyhffndcmgvqwgt:...@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=require
+  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   
   if (!connectionString) {
     throw new Error('Database configuration error');
   }
   
-  // For Vercel Postgres, we need specific SSL settings
-  const sslConfig = process.env.NODE_ENV === 'production' 
-    ? {
-        rejectUnauthorized: false
-      }
+  // For Supabase, use SSL with rejectUnauthorized based on connection string
+  // If sslmode=require is in the URL, SSL is already configured
+  const needsSSL = connectionString.includes('sslmode=require');
+  const sslConfig = needsSSL || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
     : false;
   
   return new Pool({
     connectionString,
     ssl: sslConfig,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 1000,
     max: 1 // Serverless should use single connection
   });
