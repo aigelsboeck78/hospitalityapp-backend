@@ -13,6 +13,7 @@
     "db:init": "node scripts/init-vercel-db.js",
     "db:seed": "node scripts/seed-data.js",
     "db:migrate": "node scripts/run-migrations.js",
+    "setup-users": "node scripts/setup-users.js",
     "vercel:build": "npm run db:init"
   },
   "dependencies": {
