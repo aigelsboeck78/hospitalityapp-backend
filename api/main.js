@@ -106,6 +106,38 @@ export default async function handler(req, res) {
     });
   }
   
+  // Health check endpoint to test database tables
+  if (pathname === '/api/health/auth' && method === 'GET') {
+    const pool = createPool();
+    try {
+      const tables = await pool.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('users', 'refresh_tokens', 'user_sessions', 'audit_logs')
+        ORDER BY table_name
+      `);
+      
+      const userCount = await pool.query('SELECT COUNT(*) FROM users');
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        tables: tables.rows.map(r => r.table_name),
+        userCount: parseInt(userCount.rows[0].count),
+        dbConnection: 'success'
+      });
+    } catch (error) {
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+        code: error.code
+      });
+    }
+  }
+
   // Auth login
   if (pathname === '/api/auth/login' && method === 'POST') {
     const pool = createPool();
@@ -212,10 +244,17 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Login error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        stack: error.stack
+      });
       await pool.end();
       return res.status(500).json({
         success: false,
-        message: 'Authentication failed'
+        message: 'Authentication failed',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }
