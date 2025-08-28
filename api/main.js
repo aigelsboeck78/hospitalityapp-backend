@@ -163,7 +163,7 @@ export default async function handler(req, res) {
     }
   }
   
-  // Properties
+  // Properties list
   if (pathname === '/api/properties' && method === 'GET') {
     const pool = createPool();
     
@@ -181,6 +181,37 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch properties'
+      });
+    }
+  }
+  
+  // Single property - /api/properties/:id
+  const singlePropertyMatch = pathname.match(/^\/api\/properties\/([^\/]+)$/);
+  if (singlePropertyMatch && method === 'GET') {
+    const propertyId = singlePropertyMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('SELECT * FROM properties WHERE id = $1', [propertyId]);
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Property not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Property fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch property'
       });
     }
   }
@@ -203,6 +234,39 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch guests'
+      });
+    }
+  }
+  
+  // Current guest for a property - /api/properties/:id/guests/current
+  const currentGuestMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/guests\/current$/);
+  if (currentGuestMatch && method === 'GET') {
+    const propertyId = currentGuestMatch[1];
+    const pool = createPool();
+    
+    try {
+      // Get the currently checked-in guest for this property
+      const result = await pool.query(
+        `SELECT * FROM guests 
+         WHERE property_id = $1 
+           AND checked_in = true 
+           AND (checked_out = false OR checked_out IS NULL)
+         ORDER BY check_in_date DESC 
+         LIMIT 1`,
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0] || null
+      });
+    } catch (error) {
+      console.error('Current guest fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch current guest'
       });
     }
   }
@@ -404,6 +468,149 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch settings'
+      });
+    }
+  }
+  
+  // Property devices - /api/properties/:id/devices
+  const propertyDevicesMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/devices$/);
+  if (propertyDevicesMatch && method === 'GET') {
+    const propertyId = propertyDevicesMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'SELECT * FROM devices WHERE property_id = $1 ORDER BY created_at DESC',
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Devices fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch devices'
+      });
+    }
+  }
+  
+  // MDM profiles - /api/mdm/properties/:id/profiles
+  const mdmProfilesMatch = pathname.match(/^\/api\/mdm\/properties\/([^\/]+)\/profiles$/);
+  if (mdmProfilesMatch && method === 'GET') {
+    const propertyId = mdmProfilesMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'SELECT * FROM configuration_profiles WHERE property_id = $1 ORDER BY created_at DESC',
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('MDM profiles fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch MDM profiles'
+      });
+    }
+  }
+  
+  // MDM alerts - /api/mdm/alerts
+  if (pathname === '/api/mdm/alerts' && method === 'GET') {
+    const { propertyId, resolved } = req.query || {};
+    const pool = createPool();
+    
+    try {
+      let query = 'SELECT * FROM mdm_alerts WHERE 1=1';
+      const params = [];
+      
+      if (propertyId) {
+        params.push(propertyId);
+        query += ` AND property_id = $${params.length}`;
+      }
+      
+      if (resolved !== undefined) {
+        params.push(resolved === 'true');
+        query += ` AND resolved = $${params.length}`;
+      }
+      
+      query += ' ORDER BY created_at DESC';
+      
+      const result = await pool.query(query, params);
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('MDM alerts fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch MDM alerts'
+      });
+    }
+  }
+  
+  // Notifications statistics - /api/notifications/statistics
+  if (pathname === '/api/notifications/statistics' && method === 'GET') {
+    const { propertyId } = req.query || {};
+    const pool = createPool();
+    
+    try {
+      let query = `
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN status = 'sent' THEN 1 END) as sent,
+          COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered,
+          COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed
+        FROM push_notifications
+        WHERE 1=1
+      `;
+      const params = [];
+      
+      if (propertyId) {
+        params.push(propertyId);
+        query += ` AND property_id = $${params.length}`;
+      }
+      
+      const result = await pool.query(query, params);
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0] || {
+          total: 0,
+          sent: 0,
+          delivered: 0,
+          failed: 0
+        }
+      });
+    } catch (error) {
+      console.error('Notifications statistics error:', error);
+      await pool.end();
+      
+      // Return default values if table doesn't exist
+      return res.status(200).json({
+        success: true,
+        data: {
+          total: 0,
+          sent: 0,
+          delivered: 0,
+          failed: 0
+        }
       });
     }
   }
