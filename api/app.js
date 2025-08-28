@@ -44,9 +44,33 @@ const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ["http://localhost:3000"];
 
+// Add hospitalityapp.chaletmoments.com if not already included
+const allowedOrigins = [
+  ...corsOrigins,
+  'https://hospitalityapp.chaletmoments.com',
+  'https://hospitalityapp-frontend.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+// Remove duplicates
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
 app.use(cors({
-  origin: corsOrigins,
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (uniqueOrigins.some(allowed => origin.startsWith(allowed))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
 }));
 
 // Rate limiting

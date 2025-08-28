@@ -49,12 +49,27 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// CORS origins configuration (needed early for Socket.IO)
+const corsOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+  : ["http://localhost:3000"];
+
+const allowedOrigins = [
+  ...corsOrigins,
+  'https://hospitalityapp.chaletmoments.com',
+  'https://hospitalityapp-frontend.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
 // Initialize Socket.IO
-const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:3000"];
 export const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"]
+    origin: uniqueOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -90,11 +105,22 @@ app.use(helmet({
   },
 }));
 
-// CORS configuration
-const corsOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:3000"];
+// CORS middleware using pre-defined origins
 app.use(cors({
-  origin: corsOrigins,
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (uniqueOrigins.some(allowed => origin.startsWith(allowed))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
 }));
 
 // Rate limiting
