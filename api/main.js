@@ -2082,6 +2082,80 @@ export default async function handler(req, res) {
     }
   }
   
+  // Clean dining images - POST /api/dining/cleanup-images
+  if (pathname === '/api/dining/cleanup-images' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      // List of known faulty domains
+      const faultyDomains = [
+        'cdn.fastenberg.at', 'media.obertal.at', 'media.preuneggtal.at',
+        'media.artisan-schladming.at', 'media.planai.at', 'media.reiteralm.at',
+        'media.schafalm.at', 'cdn.alpenverein.at', 'cdn.hochwurzen.at',
+        'cdn.landalm.at', 'cdn.dachstein.at', 'cdn.das-friedrich.at',
+        'cdn.planai.at', 'cdn.rohrmoos.at', 'images.falstaff.com',
+        'cdn.schladming-dachstein.at'
+      ];
+      
+      // Valid placeholder images
+      const validPlaceholders = [
+        'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1525610553991-2bede1a236e2?w=800&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&auto=format&fit=crop'
+      ];
+      
+      // Get all dining places with faulty images
+      const result = await pool.query('SELECT id, name, image_url FROM dining_places WHERE image_url IS NOT NULL');
+      
+      let updatedCount = 0;
+      const updates = [];
+      
+      for (const place of result.rows) {
+        const isFaultyDomain = faultyDomains.some(domain => place.image_url.includes(domain));
+        
+        if (isFaultyDomain) {
+          // Generate consistent placeholder based on name
+          const placeholderIndex = Math.abs(place.name.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % validPlaceholders.length;
+          const newImageUrl = validPlaceholders[placeholderIndex];
+          
+          await pool.query(
+            'UPDATE dining_places SET image_url = $1 WHERE id = $2',
+            [newImageUrl, place.id]
+          );
+          
+          updates.push({
+            name: place.name,
+            oldUrl: place.image_url,
+            newUrl: newImageUrl
+          });
+          updatedCount++;
+        }
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: `Cleaned up ${updatedCount} faulty dining images`,
+        updatedCount,
+        updates
+      });
+      
+    } catch (error) {
+      console.error('Dining cleanup error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to cleanup dining images'
+      });
+    }
+  }
+  
   // Dining - GET /api/dining
   if (pathname === '/api/dining' && method === 'GET') {
     const pool = createPool();
