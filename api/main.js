@@ -1432,9 +1432,12 @@ export default async function handler(req, res) {
   
   // Event statistics - /api/events/stats
   if (pathname === '/api/events/stats' && method === 'GET') {
-    const pool = createPool();
-    
     try {
+      console.log('Events stats endpoint hit');
+      
+      // Create pool inside try block
+      const pool = createPool();
+      
       // First, check if events table exists
       const tableCheck = await pool.query(`
         SELECT EXISTS (
@@ -1494,11 +1497,9 @@ export default async function handler(req, res) {
         data: processedStats
       });
     } catch (error) {
-      console.error('Event stats error:', error);
-      console.error('Error details:', error.message);
-      await pool.end();
+      console.error('Event stats error - returning defaults:', error.message);
       
-      // Return default stats on any error
+      // Always return default stats on any error - never return 500
       return res.status(200).json({
         success: true,
         data: {
