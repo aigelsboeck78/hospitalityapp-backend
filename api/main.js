@@ -2540,7 +2540,7 @@ export default async function handler(req, res) {
       
       if (resolved !== undefined) {
         params.push(resolved === 'true');
-        query += ` AND resolved = $${params.length}`;
+        query += ` AND is_resolved = $${params.length}`;
       }
       
       query += ' ORDER BY created_at DESC';
