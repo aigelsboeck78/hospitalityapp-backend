@@ -1358,7 +1358,8 @@ export default async function handler(req, res) {
   
   // Single event - GET /api/events/:id
   const singleEventMatch = pathname.match(/^\/api\/events\/([^\/]+)$/);
-  if (singleEventMatch && method === 'GET') {
+  // Skip if this is the stats endpoint
+  if (singleEventMatch && method === 'GET' && singleEventMatch[1] !== 'stats') {
     const eventId = singleEventMatch[1];
     const pool = createPool();
     
@@ -1388,7 +1389,7 @@ export default async function handler(req, res) {
   }
   
   // Update event - PUT /api/events/:id
-  if (singleEventMatch && method === 'PUT') {
+  if (singleEventMatch && method === 'PUT' && singleEventMatch[1] !== 'stats') {
     const eventId = singleEventMatch[1];
     const pool = createPool();
     
@@ -1439,7 +1440,7 @@ export default async function handler(req, res) {
   }
   
   // Delete event - DELETE /api/events/:id
-  if (singleEventMatch && method === 'DELETE') {
+  if (singleEventMatch && method === 'DELETE' && singleEventMatch[1] !== 'stats') {
     const eventId = singleEventMatch[1];
     const pool = createPool();
     
