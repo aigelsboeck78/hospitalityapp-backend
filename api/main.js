@@ -151,24 +151,25 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  const { url, method } = req;
+  
+  // Set CORS headers immediately for all requests - outside try-catch
+  const origin = req.headers.origin || req.headers.Origin;
+  if (origin && allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle OPTIONS requests immediately - outside try-catch
+  if (method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   try {
-    const { url, method } = req;
-    
-    // Set CORS headers immediately for all requests
-    const origin = req.headers.origin || req.headers.Origin;
-    if (origin && allowedOrigins.some(allowed => origin.startsWith(allowed))) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
-    // Handle OPTIONS requests immediately
-    if (method === 'OPTIONS') {
-      return res.status(200).end();
-    }
   
   if (url && url.startsWith('/api/events/stats') && method === 'GET') {
     try {
@@ -199,7 +200,7 @@ export default async function handler(req, res) {
     }
   }
   
-  const [pathname, queryString] = url.split('?');
+  const [pathname, queryString] = (url || '').split('?');
   
   // Parse query parameters
   const query = {};
