@@ -2496,32 +2496,6 @@ export default async function handler(req, res) {
     }
   }
   
-  // Property devices - /api/properties/:id/devices
-  const propertyDevicesMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/devices$/);
-  if (propertyDevicesMatch && method === 'GET') {
-    const propertyId = propertyDevicesMatch[1];
-    const pool = createPool();
-    
-    try {
-      const result = await pool.query(
-        'SELECT * FROM devices WHERE property_id = $1 ORDER BY created_at DESC',
-        [propertyId]
-      );
-      await pool.end();
-      
-      return res.status(200).json({
-        success: true,
-        data: result.rows
-      });
-    } catch (error) {
-      console.error('Devices fetch error:', error);
-      await pool.end();
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to fetch devices'
-      });
-    }
-  }
   
   // MDM profiles - /api/mdm/properties/:id/profiles
   const mdmProfilesMatch = pathname.match(/^\/api\/mdm\/properties\/([^\/]+)\/profiles$/);
