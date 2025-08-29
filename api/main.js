@@ -1439,51 +1439,87 @@ export default async function handler(req, res) {
   
   // Event statistics - /api/events/stats
   if (pathname === '/api/events/stats' && method === 'GET') {
-    let pool = null;
-    try {
-      console.log('Events stats endpoint hit');
-      
-      // Create pool inside try block
-      pool = createPool();
-      
-      // First, check if events table exists
-      const tableCheck = await pool.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_name = 'events'
-        );
-      `);
-      
-      if (!tableCheck.rows[0].exists) {
-        await pool.end();
-        return res.status(200).json({
-          success: true,
-          data: {
-            total: 0,
-            today: 0,
-            upcoming: 0,
-            featured: 0
-          }
-        });
-      }
-      
-      // Simple query without DATE function
-      const result = await pool.query(`
-        SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN start_date::date = CURRENT_DATE THEN 1 END) as today,
-          COUNT(CASE WHEN start_date::date > CURRENT_DATE AND start_date::date <= CURRENT_DATE + 7 THEN 1 END) as upcoming,
-          COUNT(CASE WHEN is_featured = true THEN 1 END) as featured
-        FROM events
-      `);
-      await pool.end();
-      
-      const stats = result.rows[0] || {
+    // Default response for any error
+    const defaultResponse = {
+      success: true,
+      data: {
         total: 0,
         today: 0,
         upcoming: 0,
         featured: 0
-      };
+      }
+    };
+    
+    let pool = null;
+    
+    try {
+      console.log('Events stats endpoint hit');
+      
+      // Try to create pool - if this fails, return defaults
+      try {
+        pool = createPool();
+      } catch (poolError) {
+        console.error('Failed to create pool for events stats:', poolError.message);
+        return res.status(200).json(defaultResponse);
+      }
+      
+      // First, check if events table exists
+      let tableExists = false;
+      try {
+        const tableCheck = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'events'
+          );
+        `);
+        tableExists = tableCheck.rows[0]?.exists || false;
+      } catch (tableError) {
+        console.error('Error checking events table:', tableError.message);
+        // Table check failed, assume table doesn't exist
+        tableExists = false;
+      }
+      
+      if (!tableExists) {
+        if (pool) {
+          try {
+            await pool.end();
+          } catch (e) {
+            // Ignore pool closing errors
+          }
+        }
+        return res.status(200).json(defaultResponse);
+      }
+      
+      // Simple query without DATE function
+      let stats = null;
+      try {
+        const result = await pool.query(`
+          SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN start_date::date = CURRENT_DATE THEN 1 END) as today,
+            COUNT(CASE WHEN start_date::date > CURRENT_DATE AND start_date::date <= CURRENT_DATE + 7 THEN 1 END) as upcoming,
+            COUNT(CASE WHEN is_featured = true THEN 1 END) as featured
+          FROM events
+        `);
+        stats = result.rows[0];
+      } catch (queryError) {
+        console.error('Error querying events stats:', queryError.message);
+        // Query failed, use defaults
+        stats = null;
+      }
+      
+      // Close pool
+      if (pool) {
+        try {
+          await pool.end();
+        } catch (e) {
+          // Ignore pool closing errors
+        }
+      }
+      
+      if (!stats) {
+        return res.status(200).json(defaultResponse);
+      }
       
       // Convert all values to numbers
       const processedStats = {};
@@ -1505,27 +1541,19 @@ export default async function handler(req, res) {
         data: processedStats
       });
     } catch (error) {
-      console.error('Event stats error - returning defaults:', error.message);
+      console.error('Unexpected error in events stats endpoint:', error);
       
       // Try to close pool if it was created
       if (pool) {
         try {
           await pool.end();
         } catch (e) {
-          console.error('Error closing pool:', e);
+          // Ignore pool closing errors
         }
       }
       
       // Always return default stats on any error - never return 500
-      return res.status(200).json({
-        success: true,
-        data: {
-          total: 0,
-          today: 0,
-          upcoming: 0,
-          featured: 0
-        }
-      });
+      return res.status(200).json(defaultResponse);
     }
   }
   
