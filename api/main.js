@@ -1355,13 +1355,14 @@ export default async function handler(req, res) {
     }
   }
 
-  // Upload background image with hosting - POST /api/property/:id/backgrounds/upload
+  // Upload background image with Vercel Blob Storage - POST /api/property/:id/backgrounds/upload
   const uploadBackgroundMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds\/upload$/);
   if (uploadBackgroundMatch && method === 'POST') {
     const propertyId = uploadBackgroundMatch[1];
     const pool = createPool();
     
     try {
+      const { put } = await import('@vercel/blob');
       const { image, filename, title, season = 'all' } = req.body || {};
       
       if (!image) {
@@ -1372,60 +1373,50 @@ export default async function handler(req, res) {
         });
       }
       
-      // Extract base64 string (remove data:image/xxx;base64, prefix)
-      const base64Data = image.split(',')[1] || image;
-      
-      // Upload to imgbb (free image hosting service)
-      const formData = new URLSearchParams();
-      formData.append('image', base64Data);
-      
-      // Using a free API key for imgbb
-      const imgbbResponse = await fetch('https://api.imgbb.com/1/upload?key=f08c0d8e6c9f5b5d4a1e2b3c4d5e6f7g', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-      
-      let hostedUrl;
-      
-      if (!imgbbResponse.ok) {
-        // If imgbb fails, use Cloudinary free tier as backup
-        const cloudinaryUrl = 'https://api.cloudinary.com/v1_1/demo/image/upload';
-        const cloudinaryData = {
-          file: image,
-          upload_preset: 'ml_default'
-        };
-        
-        const cloudinaryResponse = await fetch(cloudinaryUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(cloudinaryData)
+      // Check if BLOB_READ_WRITE_TOKEN is configured
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        console.error('BLOB_READ_WRITE_TOKEN not configured');
+        // Fallback to direct URL storage if Blob Storage is not configured
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'Image hosting not configured. Please set up Vercel Blob Storage or use direct URL upload.'
         });
-        
-        if (!cloudinaryResponse.ok) {
-          throw new Error('Failed to upload image to hosting service');
-        }
-        
-        const cloudinaryResult = await cloudinaryResponse.json();
-        hostedUrl = cloudinaryResult.secure_url || cloudinaryResult.url;
-      } else {
-        const imgbbData = await imgbbResponse.json();
-        if (!imgbbData.data || !imgbbData.data.url) {
-          throw new Error('Invalid response from image hosting service');
-        }
-        hostedUrl = imgbbData.data.url;
       }
       
-      // Save the hosted URL to database
+      // Convert base64 to buffer
+      const base64Data = image.split(',')[1] || image;
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Determine content type from data URL
+      let contentType = 'image/jpeg';
+      if (image.startsWith('data:')) {
+        const match = image.match(/data:([^;]+);/);
+        if (match) {
+          contentType = match[1];
+        }
+      }
+      
+      // Generate a unique filename
+      const timestamp = Date.now();
+      const sanitizedFilename = (filename || 'image').replace(/[^a-zA-Z0-9.-]/g, '_');
+      const blobFilename = `backgrounds/${propertyId}/${timestamp}-${sanitizedFilename}`;
+      
+      // Upload to Vercel Blob Storage
+      const blob = await put(blobFilename, buffer, {
+        access: 'public',
+        contentType,
+        token: process.env.BLOB_READ_WRITE_TOKEN
+      });
+      
+      console.log('Uploaded to Vercel Blob:', blob.url);
+      
+      // Save the Vercel Blob URL to database
       const result = await pool.query(
         `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [propertyId, hostedUrl, title || filename || null, season, 'hosted']
+        [propertyId, blob.url, title || filename || null, season, 'vercel-blob']
       );
       
       await pool.end();
@@ -1433,15 +1424,24 @@ export default async function handler(req, res) {
       return res.status(201).json({
         success: true,
         data: result.rows[0],
-        message: 'Image uploaded and hosted successfully'
+        message: 'Image uploaded to Vercel Blob Storage successfully'
       });
       
     } catch (error) {
-      console.error('Image hosting error:', error);
+      console.error('Vercel Blob Storage error:', error);
       await pool.end();
+      
+      // Provide helpful error message
+      if (error.message && error.message.includes('BLOB_READ_WRITE_TOKEN')) {
+        return res.status(500).json({
+          success: false,
+          message: 'Vercel Blob Storage is not configured. Please add BLOB_READ_WRITE_TOKEN to your environment variables in Vercel dashboard.'
+        });
+      }
+      
       return res.status(500).json({
         success: false,
-        message: 'Failed to upload image. Please try again or use a direct URL.'
+        message: `Failed to upload image: ${error.message}`
       });
     }
   }
