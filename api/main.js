@@ -2172,7 +2172,8 @@ export default async function handler(req, res) {
       await pool.end();
       return res.status(500).json({
         success: false,
-        message: 'Failed to cleanup dining images'
+        message: 'Failed to cleanup dining images',
+        error: error.message
       });
     }
   }
