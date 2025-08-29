@@ -22,17 +22,14 @@ async function initAuthTables() {
   // Parse the connection string to check if it's Supabase
   const isSupabase = connectionString && connectionString.includes('supabase.com');
   
+  // Force SSL handling for Vercel builds
+  process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+  
   const pool = new Pool({
     connectionString,
-    ssl: isSupabase || process.env.NODE_ENV === 'production' 
+    ssl: isSupabase || process.env.NODE_ENV === 'production' || connectionString.includes('sslmode=require')
       ? { 
-          rejectUnauthorized: false,
-          // Add additional SSL options for Supabase
-          ...(isSupabase && {
-            ca: undefined,
-            cert: undefined,
-            key: undefined
-          })
+          rejectUnauthorized: false
         } 
       : false
   });

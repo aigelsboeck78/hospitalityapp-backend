@@ -10,11 +10,11 @@
     "migrate": "node src/database/migrate.js",
     "seed": "node src/database/seed.js",
     "test": "jest",
-    "db:init": "node scripts/init-vercel-db.js",
+    "db:init": "NODE_TLS_REJECT_UNAUTHORIZED=0 node scripts/init-vercel-db.js",
     "db:seed": "node scripts/seed-data.js",
     "db:migrate": "node scripts/run-migrations.js",
     "setup-users": "node scripts/setup-users.js",
-    "vercel:build": "(npm run db:init || true) && node scripts/init-auth-tables.js"
+    "vercel:build": "NODE_TLS_REJECT_UNAUTHORIZED=0 (npm run db:init || true) && NODE_TLS_REJECT_UNAUTHORIZED=0 node scripts/init-auth-tables.js"
   },
   "dependencies": {
     "@vercel/blob": "^1.1.1",
