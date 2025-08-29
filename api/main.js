@@ -2834,6 +2834,490 @@ export default async function handler(req, res) {
     }
   }
   
+  // MDM heartbeat endpoint - POST /api/mdm/heartbeat
+  if (pathname === '/api/mdm/heartbeat' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { 
+        device_id, 
+        identifier,
+        status = 'online',
+        battery_level,
+        storage_available,
+        storage_total,
+        current_app,
+        screen_status,
+        kiosk_mode_active,
+        network_status,
+        os_version,
+        app_version,
+        metadata = {}
+      } = req.body;
+      
+      if (!device_id && !identifier) {
+        return res.status(400).json({
+          success: false,
+          message: 'Device ID or identifier is required'
+        });
+      }
+      
+      // Find device by ID or identifier
+      let deviceResult;
+      if (device_id) {
+        deviceResult = await pool.query(
+          'SELECT id, property_id FROM devices WHERE id = $1',
+          [device_id]
+        );
+      } else {
+        deviceResult = await pool.query(
+          'SELECT id, property_id FROM devices WHERE identifier = $1',
+          [identifier]
+        );
+      }
+      
+      if (deviceResult.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Device not found'
+        });
+      }
+      
+      const device = deviceResult.rows[0];
+      
+      // Update device status
+      await pool.query(`
+        UPDATE devices SET
+          device_status = $2,
+          last_heartbeat = CURRENT_TIMESTAMP,
+          last_seen = CURRENT_TIMESTAMP,
+          is_online = true,
+          os_version = COALESCE($3, os_version),
+          app_version = COALESCE($4, app_version),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `, [device.id, status, os_version, app_version]);
+      
+      // Update or insert device status details
+      await pool.query(`
+        INSERT INTO mdm_device_status (
+          device_id, property_id, last_seen, battery_level,
+          storage_available, storage_total, network_status,
+          current_app, screen_status, kiosk_mode_active, metadata
+        ) VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (device_id) DO UPDATE SET
+          last_seen = CURRENT_TIMESTAMP,
+          battery_level = COALESCE($3, mdm_device_status.battery_level),
+          storage_available = COALESCE($4, mdm_device_status.storage_available),
+          storage_total = COALESCE($5, mdm_device_status.storage_total),
+          network_status = COALESCE($6, mdm_device_status.network_status),
+          current_app = COALESCE($7, mdm_device_status.current_app),
+          screen_status = COALESCE($8, mdm_device_status.screen_status),
+          kiosk_mode_active = COALESCE($9, mdm_device_status.kiosk_mode_active),
+          metadata = COALESCE($10, mdm_device_status.metadata),
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        device.id, device.property_id, battery_level, storage_available,
+        storage_total, network_status, current_app, screen_status,
+        kiosk_mode_active, metadata
+      ]);
+      
+      // Check for pending commands
+      const pendingCommands = await pool.query(`
+        SELECT id, command_type, command_data
+        FROM mdm_commands
+        WHERE device_id = $1 AND status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `, [device.id]);
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Heartbeat received',
+        commands: pendingCommands.rows
+      });
+      
+    } catch (error) {
+      console.error('MDM heartbeat error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to process heartbeat',
+        error: error.message
+      });
+    }
+  }
+  
+  // MDM device enrollment - POST /api/mdm/enroll
+  if (pathname === '/api/mdm/enroll' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const {
+        property_id,
+        device_name,
+        device_type = 'apple_tv',
+        identifier,
+        serial_number,
+        model,
+        os_version,
+        enrollment_token
+      } = req.body;
+      
+      if (!identifier || !serial_number) {
+        return res.status(400).json({
+          success: false,
+          message: 'Device identifier and serial number are required'
+        });
+      }
+      
+      // Verify enrollment token (in production, validate against Apple's servers)
+      // For now, we'll accept any token for development
+      if (!enrollment_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Enrollment token is required'
+        });
+      }
+      
+      // Check if device already exists
+      const existingDevice = await pool.query(
+        'SELECT id FROM devices WHERE identifier = $1 OR serial_number = $2',
+        [identifier, serial_number]
+      );
+      
+      if (existingDevice.rows.length > 0) {
+        // Update existing device
+        const result = await pool.query(`
+          UPDATE devices SET
+            device_name = COALESCE($2, device_name),
+            device_type = COALESCE($3, device_type),
+            model = COALESCE($4, model),
+            os_version = COALESCE($5, os_version),
+            enrollment_status = 'enrolled',
+            enrollment_date = CURRENT_TIMESTAMP,
+            device_status = 'online',
+            is_online = true,
+            last_heartbeat = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          RETURNING *
+        `, [
+          existingDevice.rows[0].id,
+          device_name,
+          device_type,
+          model,
+          os_version
+        ]);
+        
+        await pool.end();
+        return res.status(200).json({
+          success: true,
+          message: 'Device re-enrolled successfully',
+          device: result.rows[0]
+        });
+      }
+      
+      // Create new device
+      const result = await pool.query(`
+        INSERT INTO devices (
+          property_id, device_name, device_type, identifier,
+          serial_number, model, os_version, enrollment_status,
+          enrollment_date, device_status, is_online, last_heartbeat
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, 'enrolled',
+          CURRENT_TIMESTAMP, 'online', true, CURRENT_TIMESTAMP
+        ) RETURNING *
+      `, [
+        property_id, device_name, device_type, identifier,
+        serial_number, model, os_version
+      ]);
+      
+      // Create initial device status record
+      await pool.query(`
+        INSERT INTO mdm_device_status (
+          device_id, property_id, last_seen
+        ) VALUES ($1, $2, CURRENT_TIMESTAMP)
+      `, [result.rows[0].id, property_id]);
+      
+      // Create enrollment complete alert
+      await pool.query(`
+        INSERT INTO mdm_alerts (
+          device_id, property_id, alert_type, severity,
+          title, message
+        ) VALUES (
+          $1, $2, 'enrollment_complete', 'info',
+          'Device Enrolled Successfully',
+          $3
+        )
+      `, [
+        result.rows[0].id,
+        property_id,
+        `${device_name || 'New device'} has been enrolled in MDM`
+      ]);
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        message: 'Device enrolled successfully',
+        device: result.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('MDM enrollment error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to enroll device',
+        error: error.message
+      });
+    }
+  }
+  
+  // MDM commands endpoint - POST /api/mdm/commands
+  if (pathname === '/api/mdm/commands' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const {
+        device_id,
+        command_type,
+        command_data = {},
+        priority = 5
+      } = req.body;
+      
+      if (!device_id || !command_type) {
+        return res.status(400).json({
+          success: false,
+          message: 'Device ID and command type are required'
+        });
+      }
+      
+      // Verify device exists and get property_id
+      const deviceResult = await pool.query(
+        'SELECT id, property_id, device_status FROM devices WHERE id = $1',
+        [device_id]
+      );
+      
+      if (deviceResult.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Device not found'
+        });
+      }
+      
+      const device = deviceResult.rows[0];
+      
+      // Create command
+      const result = await pool.query(`
+        INSERT INTO mdm_commands (
+          device_id, property_id, command_type,
+          command_data, status
+        ) VALUES (
+          $1, $2, $3, $4, 'pending'
+        ) RETURNING *
+      `, [
+        device.id,
+        device.property_id,
+        command_type,
+        command_data
+      ]);
+      
+      // If device is online, mark for immediate delivery
+      if (device.device_status === 'online') {
+        // In production, this would trigger push notification or WebSocket message
+        console.log(`Command queued for immediate delivery to device ${device_id}`);
+      }
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        message: 'Command created successfully',
+        command: result.rows[0],
+        delivery: device.device_status === 'online' ? 'immediate' : 'queued'
+      });
+      
+    } catch (error) {
+      console.error('MDM command creation error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create command',
+        error: error.message
+      });
+    }
+  }
+  
+  // MDM command status update - PUT /api/mdm/commands/:id
+  const mdmCommandMatch = pathname.match(/^\/api\/mdm\/commands\/([^/]+)$/);
+  if (mdmCommandMatch && method === 'PUT') {
+    const commandId = mdmCommandMatch[1];
+    const pool = createPool();
+    
+    try {
+      const { status, result } = req.body;
+      
+      if (!status) {
+        return res.status(400).json({
+          success: false,
+          message: 'Status is required'
+        });
+      }
+      
+      const updateResult = await pool.query(`
+        UPDATE mdm_commands SET
+          status = $2,
+          result = COALESCE($3, result),
+          executed_at = CASE WHEN $2 IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE executed_at END,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *
+      `, [commandId, status, result]);
+      
+      if (updateResult.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Command not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Command status updated',
+        command: updateResult.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('MDM command update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update command',
+        error: error.message
+      });
+    }
+  }
+  
+  // Get MDM devices - GET /api/mdm/devices
+  if (pathname === '/api/mdm/devices' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      const { property_id } = req.query || {};
+      
+      let query = `
+        SELECT 
+          d.*,
+          ds.battery_level,
+          ds.storage_available,
+          ds.storage_total,
+          ds.network_status,
+          ds.current_app,
+          ds.screen_status,
+          ds.kiosk_mode_active,
+          ds.last_seen as status_last_seen
+        FROM devices d
+        LEFT JOIN mdm_device_status ds ON d.id = ds.device_id
+      `;
+      
+      const params = [];
+      if (property_id) {
+        query += ' WHERE d.property_id = $1';
+        params.push(property_id);
+      }
+      
+      query += ' ORDER BY d.device_name';
+      
+      const result = await pool.query(query, params);
+      
+      // Update online status based on heartbeat
+      const now = new Date();
+      const devices = result.rows.map(device => {
+        const lastHeartbeat = device.last_heartbeat ? new Date(device.last_heartbeat) : null;
+        const minutesSinceHeartbeat = lastHeartbeat ? (now - lastHeartbeat) / 1000 / 60 : null;
+        
+        return {
+          ...device,
+          is_online: minutesSinceHeartbeat !== null && minutesSinceHeartbeat < 5,
+          computed_status: minutesSinceHeartbeat === null ? 'never_connected' :
+                          minutesSinceHeartbeat < 5 ? 'online' :
+                          minutesSinceHeartbeat < 30 ? 'idle' : 'offline'
+        };
+      });
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: devices
+      });
+      
+    } catch (error) {
+      console.error('MDM devices fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch devices',
+        error: error.message
+      });
+    }
+  }
+  
+  // MDM test notification endpoint - POST /api/mdm/test-notification  
+  if (pathname === '/api/mdm/test-notification' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { deviceId, title = 'Test Notification', message = 'This is a test notification from MDM service' } = req.body;
+      
+      if (!deviceId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Device ID is required'
+        });
+      }
+      
+      // Create a test alert
+      await pool.query(`
+        INSERT INTO mdm_alerts (device_id, property_id, alert_type, severity, title, message)
+        SELECT 
+          id as device_id,
+          property_id,
+          'test_notification' as alert_type,
+          'info' as severity,
+          $2 as title,
+          $3 as message
+        FROM devices 
+        WHERE id = $1
+      `, [deviceId, title, message]);
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Test notification sent successfully'
+      });
+      
+    } catch (error) {
+      console.error('MDM test notification error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send test notification',
+        error: error.message
+      });
+    }
+  }
+  
   // Background images - GET /api/property/:id/backgrounds
   const backgroundImagesMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds$/);
   if (backgroundImagesMatch && method === 'GET') {
