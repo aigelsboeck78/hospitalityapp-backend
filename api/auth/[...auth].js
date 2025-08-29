@@ -128,8 +128,10 @@ export default async function handler(req, res) {
       
       return res.status(200).json({
         success: true,
-        token,
-        user
+        data: {
+          token,
+          user
+        }
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -187,8 +189,10 @@ export default async function handler(req, res) {
       
       return res.status(201).json({
         success: true,
-        token,
-        user
+        data: {
+          token,
+          user
+        }
       });
     } catch (error) {
       console.error('Registration error:', error);
@@ -217,7 +221,7 @@ export default async function handler(req, res) {
       
       return res.status(200).json({
         success: true,
-        user: decoded
+        data: decoded
       });
     } catch (error) {
       console.error('Token verification error:', error);
