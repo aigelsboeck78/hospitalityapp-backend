@@ -1171,12 +1171,151 @@ export default async function handler(req, res) {
     }
   }
   
-  // Streaming services
+  // Streaming services for a specific property - GET /api/properties/:id/streaming-services
+  const propertyStreamingMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/streaming-services$/);
+  if (propertyStreamingMatch && method === 'GET') {
+    const propertyId = propertyStreamingMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        `SELECT * FROM streaming_services 
+         WHERE property_id = $1 OR property_id IS NULL 
+         ORDER BY display_order, service_name`,
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Property streaming services fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch streaming services'
+      });
+    }
+  }
+  
+  // Add streaming service - POST /api/properties/:id/streaming-services
+  if (propertyStreamingMatch && method === 'POST') {
+    const propertyId = propertyStreamingMatch[1];
+    const pool = createPool();
+    
+    try {
+      const { service_name, service_type, app_url_scheme, logo_url, instructions, requires_login, display_order } = req.body;
+      
+      const result = await pool.query(
+        `INSERT INTO streaming_services 
+         (property_id, service_name, service_type, app_url_scheme, logo_url, instructions, requires_login, display_order, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+         RETURNING *`,
+        [propertyId, service_name, service_type || 'streaming', app_url_scheme, logo_url, instructions, requires_login !== false, display_order || 0]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Streaming service create error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create streaming service'
+      });
+    }
+  }
+  
+  // Update streaming service - PUT /api/properties/:id/streaming-services/:serviceId
+  const updateStreamingMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/streaming-services\/([^\/]+)$/);
+  if (updateStreamingMatch && method === 'PUT') {
+    const [, propertyId, serviceId] = updateStreamingMatch;
+    const pool = createPool();
+    
+    try {
+      const { service_name, service_type, app_url_scheme, logo_url, instructions, requires_login, display_order, is_active } = req.body;
+      
+      const result = await pool.query(
+        `UPDATE streaming_services 
+         SET service_name = $1, service_type = $2, app_url_scheme = $3, logo_url = $4, 
+             instructions = $5, requires_login = $6, display_order = $7, is_active = $8,
+             updated_at = NOW()
+         WHERE id = $9 AND property_id = $10
+         RETURNING *`,
+        [service_name, service_type, app_url_scheme, logo_url, instructions, requires_login, display_order, is_active, serviceId, propertyId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Streaming service not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Streaming service update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update streaming service'
+      });
+    }
+  }
+  
+  // Delete streaming service - DELETE /api/properties/:id/streaming-services/:serviceId
+  if (updateStreamingMatch && method === 'DELETE') {
+    const [, propertyId, serviceId] = updateStreamingMatch;
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'DELETE FROM streaming_services WHERE id = $1 AND property_id = $2 RETURNING *',
+        [serviceId, propertyId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Streaming service not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Streaming service deleted successfully'
+      });
+    } catch (error) {
+      console.error('Streaming service delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete streaming service'
+      });
+    }
+  }
+  
+  // Streaming services (all)
   if ((pathname === '/api/streaming-services' || pathname === '/api/streaming') && method === 'GET') {
     const pool = createPool();
     
     try {
-      const result = await pool.query('SELECT * FROM streaming_services ORDER BY name');
+      const result = await pool.query('SELECT * FROM streaming_services ORDER BY service_name');
       await pool.end();
       
       return res.status(200).json({
