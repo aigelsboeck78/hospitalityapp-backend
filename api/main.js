@@ -2137,11 +2137,15 @@ export default async function handler(req, res) {
       const updates = [];
       
       for (const place of result.rows) {
+        // Skip if no image URL
+        if (!place.image_url) continue;
+        
         const isFaultyDomain = faultyDomains.some(domain => place.image_url.includes(domain));
         
         if (isFaultyDomain) {
-          // Generate consistent placeholder based on name
-          const placeholderIndex = Math.abs(place.name.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % validPlaceholders.length;
+          // Generate consistent placeholder based on name (use ID if name is null)
+          const nameForHash = place.name || place.id || 'default';
+          const placeholderIndex = Math.abs(String(nameForHash).split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % validPlaceholders.length;
           const newImageUrl = validPlaceholders[placeholderIndex];
           
           await pool.query(
@@ -2150,7 +2154,7 @@ export default async function handler(req, res) {
           );
           
           updates.push({
-            name: place.name,
+            name: place.name || 'Unknown',
             oldUrl: place.image_url,
             newUrl: newImageUrl
           });
