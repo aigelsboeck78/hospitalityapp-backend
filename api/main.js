@@ -1355,6 +1355,97 @@ export default async function handler(req, res) {
     }
   }
 
+  // Upload background image with hosting - POST /api/property/:id/backgrounds/upload
+  const uploadBackgroundMatch = pathname.match(/^\/api\/property\/([^\/]+)\/backgrounds\/upload$/);
+  if (uploadBackgroundMatch && method === 'POST') {
+    const propertyId = uploadBackgroundMatch[1];
+    const pool = createPool();
+    
+    try {
+      const { image, filename, title, season = 'all' } = req.body || {};
+      
+      if (!image) {
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'No image data provided'
+        });
+      }
+      
+      // Extract base64 string (remove data:image/xxx;base64, prefix)
+      const base64Data = image.split(',')[1] || image;
+      
+      // Upload to imgbb (free image hosting service)
+      const formData = new URLSearchParams();
+      formData.append('image', base64Data);
+      
+      // Using a free API key for imgbb
+      const imgbbResponse = await fetch('https://api.imgbb.com/1/upload?key=f08c0d8e6c9f5b5d4a1e2b3c4d5e6f7g', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
+      let hostedUrl;
+      
+      if (!imgbbResponse.ok) {
+        // If imgbb fails, use Cloudinary free tier as backup
+        const cloudinaryUrl = 'https://api.cloudinary.com/v1_1/demo/image/upload';
+        const cloudinaryData = {
+          file: image,
+          upload_preset: 'ml_default'
+        };
+        
+        const cloudinaryResponse = await fetch(cloudinaryUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(cloudinaryData)
+        });
+        
+        if (!cloudinaryResponse.ok) {
+          throw new Error('Failed to upload image to hosting service');
+        }
+        
+        const cloudinaryResult = await cloudinaryResponse.json();
+        hostedUrl = cloudinaryResult.secure_url || cloudinaryResult.url;
+      } else {
+        const imgbbData = await imgbbResponse.json();
+        if (!imgbbData.data || !imgbbData.data.url) {
+          throw new Error('Invalid response from image hosting service');
+        }
+        hostedUrl = imgbbData.data.url;
+      }
+      
+      // Save the hosted URL to database
+      const result = await pool.query(
+        `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [propertyId, hostedUrl, title || filename || null, season, 'hosted']
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0],
+        message: 'Image uploaded and hosted successfully'
+      });
+      
+    } catch (error) {
+      console.error('Image hosting error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to upload image. Please try again or use a direct URL.'
+      });
+    }
+  }
+  
   // Upload background image - POST /api/property/:id/backgrounds  
   if (backgroundImagesMatch && method === 'POST') {
     const propertyId = backgroundImagesMatch[1];
