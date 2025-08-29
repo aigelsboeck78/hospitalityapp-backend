@@ -1331,10 +1331,13 @@ export default async function handler(req, res) {
         });
       }
       
-      let { title, description, start_date, end_date, image_url, location, 
+      let { title, name, description, start_date, end_date, image_url, location, 
            event_type, price, booking_url, is_featured = false } = req.body;
       
-      console.log('Creating event:', { title, event_type, location });
+      // Map title to name for database (frontend sends title, database has name column)
+      name = name || title;
+      
+      console.log('Creating event:', { name, event_type, location });
       
       // Auto-import image to Vercel Blob if it's an external URL
       try {
@@ -1370,16 +1373,22 @@ export default async function handler(req, res) {
           await pool.query(`
             CREATE TABLE IF NOT EXISTS events (
               id SERIAL PRIMARY KEY,
-              title VARCHAR(255) NOT NULL,
+              external_id VARCHAR(255) UNIQUE,
+              name VARCHAR(255) NOT NULL,
               description TEXT,
               start_date TIMESTAMP NOT NULL,
               end_date TIMESTAMP,
               image_url TEXT,
-              location VARCHAR(255),
+              location TEXT,
+              source_url TEXT,
+              category VARCHAR(100),
               event_type VARCHAR(100),
               price DECIMAL(10, 2),
+              price_info TEXT,
+              contact_info TEXT,
               booking_url TEXT,
               is_featured BOOLEAN DEFAULT false,
+              is_active BOOLEAN DEFAULT true,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -1397,11 +1406,11 @@ export default async function handler(req, res) {
       
       const result = await pool.query(
         `INSERT INTO events 
-         (title, description, start_date, end_date, image_url, location,
+         (name, description, start_date, end_date, image_url, location,
           event_type, price, booking_url, is_featured)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [title, description, start_date, end_date, image_url, location,
+        [name, description, start_date, end_date, image_url, location,
          event_type, price, booking_url, is_featured || false]
       );
       
@@ -1483,10 +1492,13 @@ export default async function handler(req, res) {
         });
       }
       
-      let { title, description, start_date, end_date, image_url, location,
+      let { title, name, description, start_date, end_date, image_url, location,
            event_type, price, booking_url, is_featured } = req.body;
       
-      console.log('Updating event:', eventId, { title, event_type, location });
+      // Map title to name for database (frontend sends title, database has name column)
+      name = name || title;
+      
+      console.log('Updating event:', eventId, { name, event_type, location });
       
       // Auto-import image to Vercel Blob if it's an external URL
       try {
@@ -1525,12 +1537,12 @@ export default async function handler(req, res) {
       
       const result = await pool.query(
         `UPDATE events
-         SET title = $1, description = $2, start_date = $3, end_date = $4,
+         SET name = $1, description = $2, start_date = $3, end_date = $4,
              image_url = $5, location = $6, event_type = $7, price = $8,
              booking_url = $9, is_featured = $10, updated_at = NOW()
          WHERE id = $11
          RETURNING *`,
-        [title, description, start_date, end_date, image_url, location,
+        [name, description, start_date, end_date, image_url, location,
          event_type, price, booking_url, is_featured || false, eventId]
       );
       
