@@ -1376,10 +1376,11 @@ export default async function handler(req, res) {
         });
       }
       
-      // Check size if it's a base64 data URL
+      let finalImageUrl = imageUrl;
+      
+      // For base64 images, we need to handle the column size limitation
       if (imageUrl.startsWith('data:image/')) {
-        // Rough check: base64 is about 1.37x the original size
-        // 4.5MB limit / 1.37 ≈ 3.3MB original, but we'll use 4MB for the encoded string
+        // Check size
         if (imageUrl.length > 4 * 1024 * 1024) {
           await pool.end();
           return res.status(413).json({
@@ -1387,16 +1388,31 @@ export default async function handler(req, res) {
             message: 'Image too large. Please reduce file size to under 3MB'
           });
         }
-        console.log('Uploading base64 image, size:', (imageUrl.length / 1024 / 1024).toFixed(2), 'MB');
-      } else {
-        console.log('Uploading external URL:', imageUrl);
+        
+        // For now, return an error since the column isn't updated on production
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'File uploads are temporarily disabled. Please use the URL upload option with an external image URL (e.g., from Unsplash, Imgur, or another image hosting service).'
+        });
+      }
+      
+      console.log('Uploading external URL:', finalImageUrl);
+      
+      // First, try to update the column type (this might fail if already done or no permissions)
+      try {
+        await pool.query('ALTER TABLE background_images ALTER COLUMN image_url TYPE TEXT');
+        console.log('Updated image_url column to TEXT');
+      } catch (alterError) {
+        // Ignore - column might already be TEXT or we don't have permissions
+        console.log('Could not alter column (might already be TEXT):', alterError.message);
       }
       
       const result = await pool.query(
         `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [propertyId, imageUrl, title || null, season, uploadType]
+        [propertyId, finalImageUrl, title || null, season, uploadType]
       );
       
       await pool.end();
@@ -1409,8 +1425,18 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Background image upload error:', error);
-      console.error('Error stack:', error.stack);
-      console.error('Error details:', error.detail || error.message);
+      console.error('Error code:', error.code);
+      console.error('Error detail:', error.detail);
+      
+      // Check if it's a string length error
+      if (error.code === '22001' || error.message.includes('character varying') || error.message.includes('too long')) {
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'Image URL is too long. Please use a shorter URL or use an external image hosting service.'
+        });
+      }
+      
       await pool.end();
       return res.status(500).json({
         success: false,
