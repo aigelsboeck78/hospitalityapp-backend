@@ -1315,6 +1315,46 @@ export default async function handler(req, res) {
     }
   }
   
+  // Scrape events - POST /api/events/scrape
+  if (pathname === '/api/events/scrape' && method === 'POST') {
+    try {
+      // Import the enhanced scraper dynamically
+      const { EnhancedEventScraperService } = await import('../src/services/enhancedEventScraperService.js');
+      
+      console.log('🔄 Starting event scraping process...');
+      
+      // Get max pages from request body (default 3)
+      const { maxPages = 3 } = req.body || {};
+      
+      // Create scraper instance
+      const scraper = new EnhancedEventScraperService();
+      
+      // Start scraping in background (don't wait for completion)
+      const scrapePromise = scraper.scrapeEvents(maxPages).then(events => {
+        console.log(`✅ Scraping completed: ${events.length} events processed`);
+        return events;
+      }).catch(error => {
+        console.error('❌ Scraping failed:', error);
+        return [];
+      });
+      
+      // Return immediately with success message
+      return res.status(200).json({
+        success: true,
+        message: `Scraping started for up to ${maxPages} pages. This may take a few minutes.`,
+        estimatedTime: `${maxPages * 30} seconds`
+      });
+      
+    } catch (error) {
+      console.error('Scrape endpoint error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to start scraping process',
+        error: error.message
+      });
+    }
+  }
+  
   // Create event - POST /api/events
   if (pathname === '/api/events' && method === 'POST') {
     let pool = null;
