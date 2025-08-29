@@ -79,6 +79,61 @@ const generateToken = (payload) => {
   });
 };
 
+// Helper function to import external image to Vercel Blob
+const importImageToBlob = async (imageUrl, folder, filename) => {
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      console.error('BLOB_READ_WRITE_TOKEN not configured, returning original URL');
+      return imageUrl;
+    }
+    
+    // If already a Vercel Blob URL, return as-is
+    if (imageUrl.includes('blob.vercel-storage.com')) {
+      return imageUrl;
+    }
+    
+    console.log(`Importing image from ${imageUrl} to ${folder}/${filename}`);
+    
+    // Fetch the image
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/*'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    
+    // Get the image buffer
+    const buffer = await response.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // Import Vercel Blob
+    const { put } = await import('@vercel/blob');
+    
+    // Upload to Vercel Blob
+    const blob = await put(
+      `${folder}/${filename}`,
+      Buffer.from(buffer),
+      {
+        access: 'public',
+        contentType,
+        token: process.env.BLOB_READ_WRITE_TOKEN
+      }
+    );
+    
+    console.log(`Successfully imported to Vercel Blob: ${blob.url}`);
+    return blob.url;
+    
+  } catch (error) {
+    console.error('Failed to import image to Blob:', error);
+    // Return original URL if import fails
+    return imageUrl;
+  }
+};
+
 // Vercel configuration for body parsing
 export const config = {
   api: {
@@ -1026,6 +1081,50 @@ export default async function handler(req, res) {
     }
   }
   
+  // Create activity - /api/activities
+  if (pathname === '/api/activities' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      let { property_id, title, description, image_url, activity_type, location, contact_info, 
+           operating_hours, price_range, booking_required, booking_url, booking_phone,
+           is_active = true, display_order = 0 } = req.body;
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, `activities/${property_id}`, filename);
+      }
+      
+      const result = await pool.query(
+        `INSERT INTO activities 
+         (property_id, title, description, image_url, activity_type, location, contact_info,
+          operating_hours, price_range, booking_required, booking_url, booking_phone,
+          is_active, display_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING *`,
+        [property_id, title, description, image_url, activity_type, location, contact_info,
+         operating_hours, price_range, booking_required, booking_url, booking_phone,
+         is_active, display_order]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Activity create error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create activity'
+      });
+    }
+  }
+  
   // Single activity - /api/activities/:id
   const singleActivityMatch = pathname.match(/^\/api\/activities\/([^\/]+)$/);
   if (singleActivityMatch && method === 'GET') {
@@ -1057,7 +1156,101 @@ export default async function handler(req, res) {
     }
   }
   
-  // Events
+  // Update activity - /api/activities/:id
+  if (singleActivityMatch && method === 'PUT') {
+    const activityId = singleActivityMatch[1];
+    const pool = createPool();
+    
+    try {
+      let { title, description, image_url, activity_type, location, contact_info,
+           operating_hours, price_range, booking_required, booking_url, booking_phone,
+           is_active, display_order, property_id } = req.body;
+      
+      // Get property_id if not provided
+      if (!property_id) {
+        const existing = await pool.query('SELECT property_id FROM activities WHERE id = $1', [activityId]);
+        if (existing.rows.length > 0) {
+          property_id = existing.rows[0].property_id;
+        }
+      }
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, `activities/${property_id || activityId}`, filename);
+      }
+      
+      const result = await pool.query(
+        `UPDATE activities
+         SET title = $1, description = $2, image_url = $3, activity_type = $4,
+             location = $5, contact_info = $6, operating_hours = $7, price_range = $8,
+             booking_required = $9, booking_url = $10, booking_phone = $11,
+             is_active = $12, display_order = $13, updated_at = NOW()
+         WHERE id = $14
+         RETURNING *`,
+        [title, description, image_url, activity_type, location, contact_info,
+         operating_hours, price_range, booking_required, booking_url, booking_phone,
+         is_active, display_order, activityId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Activity not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Activity update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update activity'
+      });
+    }
+  }
+  
+  // Delete activity - /api/activities/:id
+  if (singleActivityMatch && method === 'DELETE') {
+    const activityId = singleActivityMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('DELETE FROM activities WHERE id = $1 RETURNING *', [activityId]);
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Activity not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Activity deleted successfully'
+      });
+    } catch (error) {
+      console.error('Activity delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete activity'
+      });
+    }
+  }
+  
+  // Events - GET /api/events
   if (pathname === '/api/events' && method === 'GET') {
     const pool = createPool();
     
@@ -1078,6 +1271,161 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch events'
+      });
+    }
+  }
+  
+  // Create event - POST /api/events
+  if (pathname === '/api/events' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      let { title, description, start_date, end_date, image_url, location, 
+           event_type, price, booking_url, is_featured = false } = req.body;
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, 'events', filename);
+      }
+      
+      const result = await pool.query(
+        `INSERT INTO events 
+         (title, description, start_date, end_date, image_url, location,
+          event_type, price, booking_url, is_featured)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [title, description, start_date, end_date, image_url, location,
+         event_type, price, booking_url, is_featured]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Event create error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create event'
+      });
+    }
+  }
+  
+  // Single event - GET /api/events/:id
+  const singleEventMatch = pathname.match(/^\/api\/events\/([^\/]+)$/);
+  if (singleEventMatch && method === 'GET') {
+    const eventId = singleEventMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('SELECT * FROM events WHERE id = $1', [eventId]);
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Event fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch event'
+      });
+    }
+  }
+  
+  // Update event - PUT /api/events/:id
+  if (singleEventMatch && method === 'PUT') {
+    const eventId = singleEventMatch[1];
+    const pool = createPool();
+    
+    try {
+      let { title, description, start_date, end_date, image_url, location,
+           event_type, price, booking_url, is_featured } = req.body;
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, 'events', filename);
+      }
+      
+      const result = await pool.query(
+        `UPDATE events
+         SET title = $1, description = $2, start_date = $3, end_date = $4,
+             image_url = $5, location = $6, event_type = $7, price = $8,
+             booking_url = $9, is_featured = $10, updated_at = NOW()
+         WHERE id = $11
+         RETURNING *`,
+        [title, description, start_date, end_date, image_url, location,
+         event_type, price, booking_url, is_featured, eventId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Event update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update event'
+      });
+    }
+  }
+  
+  // Delete event - DELETE /api/events/:id
+  if (singleEventMatch && method === 'DELETE') {
+    const eventId = singleEventMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('DELETE FROM events WHERE id = $1 RETURNING *', [eventId]);
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Event deleted successfully'
+      });
+    } catch (error) {
+      console.error('Event delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete event'
       });
     }
   }
@@ -1114,7 +1462,7 @@ export default async function handler(req, res) {
     }
   }
   
-  // Dining
+  // Dining - GET /api/dining
   if (pathname === '/api/dining' && method === 'GET') {
     const pool = createPool();
     
@@ -1135,6 +1483,168 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch dining'
+      });
+    }
+  }
+  
+  // Create dining place - POST /api/dining
+  if (pathname === '/api/dining' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      let { name, description, cuisine_type, price_range, location, contact_phone,
+           website, opening_hours, image_url, rating, is_featured = false,
+           reservation_required = false, distance_km, event_type } = req.body;
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${name?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, 'dining', filename);
+      }
+      
+      const result = await pool.query(
+        `INSERT INTO dining_places 
+         (name, description, cuisine_type, price_range, location, contact_phone,
+          website, opening_hours, image_url, rating, is_featured,
+          reservation_required, distance_km, event_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING *`,
+        [name, description, cuisine_type, price_range, location, contact_phone,
+         website, opening_hours, image_url, rating, is_featured,
+         reservation_required, distance_km, event_type]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Dining create error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create dining place'
+      });
+    }
+  }
+  
+  // Single dining place - GET /api/dining/:id
+  const singleDiningMatch = pathname.match(/^\/api\/dining\/([^\/]+)$/);
+  if (singleDiningMatch && method === 'GET') {
+    const diningId = singleDiningMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('SELECT * FROM dining_places WHERE id = $1', [diningId]);
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Dining place not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Dining fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch dining place'
+      });
+    }
+  }
+  
+  // Update dining place - PUT /api/dining/:id
+  if (singleDiningMatch && method === 'PUT') {
+    const diningId = singleDiningMatch[1];
+    const pool = createPool();
+    
+    try {
+      let { name, description, cuisine_type, price_range, location, contact_phone,
+           website, opening_hours, image_url, rating, is_featured,
+           reservation_required, distance_km, event_type } = req.body;
+      
+      // Auto-import image to Vercel Blob if it's an external URL
+      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${name?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        image_url = await importImageToBlob(image_url, 'dining', filename);
+      }
+      
+      const result = await pool.query(
+        `UPDATE dining_places
+         SET name = $1, description = $2, cuisine_type = $3, price_range = $4,
+             location = $5, contact_phone = $6, website = $7, opening_hours = $8,
+             image_url = $9, rating = $10, is_featured = $11,
+             reservation_required = $12, distance_km = $13, event_type = $14,
+             updated_at = NOW()
+         WHERE id = $15
+         RETURNING *`,
+        [name, description, cuisine_type, price_range, location, contact_phone,
+         website, opening_hours, image_url, rating, is_featured,
+         reservation_required, distance_km, event_type, diningId]
+      );
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Dining place not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Dining update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update dining place'
+      });
+    }
+  }
+  
+  // Delete dining place - DELETE /api/dining/:id
+  if (singleDiningMatch && method === 'DELETE') {
+    const diningId = singleDiningMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query('DELETE FROM dining_places WHERE id = $1 RETURNING *', [diningId]);
+      
+      if (result.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Dining place not found'
+        });
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Dining place deleted successfully'
+      });
+    } catch (error) {
+      console.error('Dining delete error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete dining place'
       });
     }
   }
