@@ -19,10 +19,21 @@ async function initAuthTables() {
 
   console.log('Using connection string:', connectionString.replace(/:[^:@]+@/, ':***@'));
 
+  // Parse the connection string to check if it's Supabase
+  const isSupabase = connectionString && connectionString.includes('supabase.com');
+  
   const pool = new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' 
-      ? { rejectUnauthorized: false } 
+    ssl: isSupabase || process.env.NODE_ENV === 'production' 
+      ? { 
+          rejectUnauthorized: false,
+          // Add additional SSL options for Supabase
+          ...(isSupabase && {
+            ca: undefined,
+            cert: undefined,
+            key: undefined
+          })
+        } 
       : false
   });
 

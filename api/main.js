@@ -53,13 +53,20 @@ const createPool = () => {
   }
   
   // For Supabase, handle SSL properly
+  const isSupabase = connectionString && connectionString.includes('supabase.com');
   let sslConfig = false;
   
-  if (connectionString.includes('sslmode=require') || process.env.NODE_ENV === 'production') {
+  if (isSupabase || connectionString.includes('sslmode=require') || process.env.NODE_ENV === 'production') {
     // Use SSL but don't reject unauthorized certificates
     sslConfig = {
       rejectUnauthorized: false,
-      require: true
+      require: true,
+      // Add additional SSL options for Supabase
+      ...(isSupabase && {
+        ca: undefined,
+        cert: undefined,
+        key: undefined
+      })
     };
   }
   
@@ -1432,11 +1439,12 @@ export default async function handler(req, res) {
   
   // Event statistics - /api/events/stats
   if (pathname === '/api/events/stats' && method === 'GET') {
+    let pool = null;
     try {
       console.log('Events stats endpoint hit');
       
       // Create pool inside try block
-      const pool = createPool();
+      pool = createPool();
       
       // First, check if events table exists
       const tableCheck = await pool.query(`
@@ -1498,6 +1506,15 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Event stats error - returning defaults:', error.message);
+      
+      // Try to close pool if it was created
+      if (pool) {
+        try {
+          await pool.end();
+        } catch (e) {
+          console.error('Error closing pool:', e);
+        }
+      }
       
       // Always return default stats on any error - never return 500
       return res.status(200).json({

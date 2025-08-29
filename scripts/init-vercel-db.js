@@ -18,10 +18,19 @@ async function initDatabase() {
                           process.env.DATABASE_URL || 
                           `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 
+  // Parse the connection string to check if it's Supabase
+  const isSupabase = connectionString && connectionString.includes('supabase.com');
+  
   const client = new Client({
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? {
-      rejectUnauthorized: false
+    ssl: isSupabase || process.env.NODE_ENV === 'production' ? {
+      rejectUnauthorized: false,
+      // Add additional SSL options for Supabase
+      ...(isSupabase && {
+        ca: undefined,
+        cert: undefined,
+        key: undefined
+      })
     } : false
   });
 
