@@ -151,28 +151,26 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // Early check for events/stats to prevent any 500 errors
   const { url, method } = req;
   
-  // Handle OPTIONS requests early for all endpoints
+  // Set CORS headers immediately for all requests
+  const origin = req.headers.origin || req.headers.Origin;
+  if (origin && allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle OPTIONS requests immediately
   if (method === 'OPTIONS') {
-    try {
-      await runMiddleware(req, res, corsMiddleware);
-      return res.status(200).end();
-    } catch (e) {
-      // Fallback CORS headers if middleware fails
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      return res.status(200).end();
-    }
+    return res.status(200).end();
   }
   
   if (url && url.startsWith('/api/events/stats') && method === 'GET') {
     try {
-      // Apply CORS for this specific endpoint
-      await runMiddleware(req, res, corsMiddleware);
-      
       // Return default stats - database may not be initialized
       console.log('Events stats endpoint - returning defaults due to early catch');
       return res.status(200).json({
@@ -199,9 +197,6 @@ export default async function handler(req, res) {
       });
     }
   }
-  
-  // Apply CORS for all other endpoints
-  await runMiddleware(req, res, corsMiddleware);
   
   const [pathname, queryString] = url.split('?');
   
