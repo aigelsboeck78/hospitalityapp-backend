@@ -8,6 +8,10 @@
       "destination": "/api/auth/[...auth]"
     },
     {
+      "source": "/properties/:id/devices",
+      "destination": "/api/main"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
@@ -24,7 +28,7 @@
   },
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Credentials", "value": "true" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
