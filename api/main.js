@@ -79,6 +79,15 @@ const generateToken = (payload) => {
   });
 };
 
+// Vercel configuration for body parsing
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '4.5mb',
+    },
+  },
+};
+
 export default async function handler(req, res) {
   // Apply CORS
   await runMiddleware(req, res, corsMiddleware);
@@ -96,27 +105,12 @@ export default async function handler(req, res) {
   }
   req.query = query;
   
-  // Parse body for POST/PUT/PATCH requests if needed
+  // Vercel should handle body parsing with the export config above
+  // Log body type for debugging
   if (['POST', 'PUT', 'PATCH'].includes(method)) {
-    if (!req.body || (typeof req.body === 'object' && Object.keys(req.body).length === 0)) {
-      try {
-        const contentType = req.headers['content-type'] || '';
-        
-        // Only parse JSON bodies
-        if (contentType.includes('application/json')) {
-          const chunks = [];
-          for await (const chunk of req) {
-            chunks.push(chunk);
-          }
-          const bodyString = Buffer.concat(chunks).toString();
-          if (bodyString) {
-            req.body = JSON.parse(bodyString);
-          }
-        }
-      } catch (error) {
-        console.error('Body parsing error:', error);
-        // Continue without parsed body - endpoints can handle it
-      }
+    console.log('Request body type:', typeof req.body);
+    if (req.body) {
+      console.log('Body keys:', Object.keys(req.body).slice(0, 5));
     }
   }
   
