@@ -1437,24 +1437,49 @@ export default async function handler(req, res) {
     try {
       const result = await pool.query(`
         SELECT 
-          COUNT(*) as total_events,
-          COUNT(CASE WHEN start_date >= CURRENT_DATE THEN 1 END) as upcoming_events,
-          COUNT(CASE WHEN start_date < CURRENT_DATE THEN 1 END) as past_events
+          COUNT(*)::INTEGER as total,
+          COUNT(CASE WHEN DATE(start_date) = CURRENT_DATE THEN 1 END)::INTEGER as today,
+          COUNT(CASE WHEN start_date > CURRENT_DATE AND start_date <= CURRENT_DATE + INTERVAL '7 days' THEN 1 END)::INTEGER as upcoming,
+          COUNT(CASE WHEN is_featured = true THEN 1 END)::INTEGER as featured
         FROM events
       `);
       await pool.end();
       
+      const stats = result.rows[0] || {
+        total: 0,
+        today: 0,
+        upcoming: 0,
+        featured: 0
+      };
+      
+      // Convert bigint to number
+      Object.keys(stats).forEach(key => {
+        if (typeof stats[key] === 'bigint') {
+          stats[key] = Number(stats[key]);
+        }
+      });
+      
       return res.status(200).json({
         success: true,
-        data: result.rows[0] || {
-          total_events: 0,
-          upcoming_events: 0,
-          past_events: 0
-        }
+        data: stats
       });
     } catch (error) {
       console.error('Event stats error:', error);
       await pool.end();
+      
+      // If table doesn't exist, return default stats
+      if (error.code === '42P01') {
+        return res.status(200).json({
+          success: true,
+          data: {
+            total: 0,
+            today: 0,
+            upcoming: 0,
+            featured: 0
+          }
+        });
+      }
+      
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch event statistics'
