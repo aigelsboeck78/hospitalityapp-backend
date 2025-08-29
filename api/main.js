@@ -740,6 +740,187 @@ export default async function handler(req, res) {
     }
   }
   
+  // Devices list - GET /api/devices
+  if (pathname === '/api/devices' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      const { property_id } = req.query || {};
+      
+      let query = `
+        SELECT d.*, p.name as property_name 
+        FROM devices d
+        LEFT JOIN properties p ON d.property_id = p.id
+        WHERE 1=1
+      `;
+      const params = [];
+      
+      if (property_id) {
+        params.push(property_id);
+        query += ` AND d.property_id = $${params.length}`;
+      }
+      
+      query += ' ORDER BY d.created_at DESC';
+      
+      const result = await pool.query(query, params);
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Devices fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch devices'
+      });
+    }
+  }
+  
+  // Single device - GET /api/devices/:id
+  const singleDeviceMatch = pathname.match(/^\/api\/devices\/([^\/]+)$/);
+  if (singleDeviceMatch && method === 'GET') {
+    const deviceId = singleDeviceMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        `SELECT d.*, p.name as property_name 
+         FROM devices d
+         LEFT JOIN properties p ON d.property_id = p.id
+         WHERE d.id = $1`,
+        [deviceId]
+      );
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Device not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Device fetch error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch device'
+      });
+    }
+  }
+  
+  // Restore default device - POST /api/devices/restore-default
+  if (pathname === '/api/devices/restore-default' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      // First ensure devices table exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS devices (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+          device_name VARCHAR(255) NOT NULL,
+          device_type VARCHAR(50),
+          identifier VARCHAR(255),
+          serial_number VARCHAR(255),
+          model VARCHAR(255),
+          is_active BOOLEAN DEFAULT true,
+          is_primary BOOLEAN DEFAULT false,
+          metadata JSONB,
+          kiosk_mode_enabled BOOLEAN DEFAULT false,
+          kiosk_mode_config JSONB,
+          allowed_apps JSONB,
+          restrictions JSONB,
+          room_number VARCHAR(50),
+          device_status VARCHAR(50),
+          enrollment_status VARCHAR(50),
+          enrollment_date TIMESTAMP,
+          provisional_period_end TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
+      // Ensure property exists
+      await pool.query(`
+        INSERT INTO properties (
+          id, name, address, wifi_ssid, wifi_password, welcome_message
+        ) VALUES (
+          '41059600-402d-434e-9b34-2b4821f6e3a4',
+          'Chalet 20',
+          'Schladming, Austria',
+          'Chalet20_WiFi',
+          'Welcome2024',
+          'Welcome to Chalet 20! Enjoy your stay.'
+        )
+        ON CONFLICT (id) DO NOTHING;
+      `);
+      
+      // Insert or update the device
+      const result = await pool.query(`
+        INSERT INTO devices (
+          id, property_id, device_name, device_type,
+          identifier, serial_number, model, is_active, is_primary,
+          metadata, kiosk_mode_enabled, kiosk_mode_config,
+          allowed_apps, restrictions, room_number, device_status,
+          enrollment_status, enrollment_date, provisional_period_end
+        ) VALUES (
+          '9f724aaa-295f-4736-b38a-a226441279ff',
+          '41059600-402d-434e-9b34-2b4821f6e3a4',
+          'Living Room Apple TV',
+          'apple_tv',
+          '00008110-000439023C63801E',
+          'MW1R9ND9G1',
+          'Apple TV 4K (3rd generation)',
+          true,
+          true,
+          '{"hdr": true, "storage": "128GB", "generation": "3rd", "resolution": "4K"}'::jsonb,
+          true,
+          '{"mode": "autonomous", "enabled": true, "autoReturn": true, "returnTimeout": 1800}'::jsonb,
+          '[{"name": "Netflix", "enabled": true, "bundleId": "com.netflix.Netflix"}, {"name": "YouTube", "enabled": true, "bundleId": "com.google.ios.youtube"}, {"name": "Spotify", "enabled": true, "bundleId": "com.spotify.client"}]'::jsonb,
+          '{"disableAirPlay": false, "disableAutoLock": true, "disableAppRemoval": true}'::jsonb,
+          'Living Room',
+          'online',
+          'enrolled',
+          '2025-08-19 10:52:12.959495',
+          '2025-09-18 10:52:12.959495'
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          device_name = EXCLUDED.device_name,
+          model = EXCLUDED.model,
+          metadata = EXCLUDED.metadata,
+          kiosk_mode_config = EXCLUDED.kiosk_mode_config,
+          allowed_apps = EXCLUDED.allowed_apps,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *;
+      `);
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Device restored successfully',
+        data: result.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('Device restore error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to restore device',
+        error: error.message
+      });
+    }
+  }
+  
   // Properties list
   if (pathname === '/api/properties' && method === 'GET') {
     const pool = createPool();
