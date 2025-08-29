@@ -2127,25 +2127,41 @@ export default async function handler(req, res) {
         });
       }
       
-      // Fetch the image from the external URL
+      // Log the URL being fetched
+      console.log('Proxying image from:', url);
+      
+      // Fetch the image from the external URL with better headers
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; VacationRentalBot/1.0)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Referer': 'https://hospitalityapp.chaletmoments.com/'
         },
-        timeout: 10000, // 10 second timeout
+        redirect: 'follow'
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+        console.error('URL:', url);
+        return res.status(response.status).json({
+          success: false,
+          message: `Failed to fetch image: ${response.status} ${response.statusText}`,
+          url: url
+        });
       }
       
       const contentType = response.headers.get('content-type');
+      console.log('Content-Type:', contentType);
       
-      // Validate that it's an image
-      if (!contentType || !contentType.startsWith('image/')) {
+      // Validate that it's an image (be more permissive)
+      if (contentType && !contentType.startsWith('image/') && !contentType.includes('octet-stream')) {
+        console.error('Invalid content type:', contentType);
         return res.status(400).json({
           success: false,
-          message: 'URL does not point to an image'
+          message: 'URL does not point to an image',
+          contentType: contentType
         });
       }
       
@@ -2153,7 +2169,7 @@ export default async function handler(req, res) {
       const buffer = await response.arrayBuffer();
       
       // Set appropriate headers
-      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Type', contentType || 'image/jpeg');
       res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
       res.setHeader('Access-Control-Allow-Origin', '*');
       
