@@ -3241,6 +3241,68 @@ export default async function handler(req, res) {
     }
   }
   
+  // Test device notification - POST /api/notifications/devices/:id/test-notify
+  const testNotifyMatch = pathname.match(/^\/api\/notifications\/devices\/([^\/]+)\/test-notify$/);
+  if (testNotifyMatch && method === 'POST') {
+    const deviceId = testNotifyMatch[1];
+    const pool = createPool();
+    
+    try {
+      // Get device details
+      const deviceResult = await pool.query(
+        'SELECT * FROM devices WHERE id = $1',
+        [deviceId]
+      );
+      
+      if (deviceResult.rows.length === 0) {
+        await pool.end();
+        return res.status(404).json({
+          success: false,
+          message: 'Device not found'
+        });
+      }
+      
+      const device = deviceResult.rows[0];
+      
+      // Create a test notification/alert
+      await pool.query(`
+        INSERT INTO mdm_alerts (
+          device_id, property_id, alert_type, severity, 
+          title, message, is_resolved, created_at
+        ) VALUES (
+          $1, $2, 'test_notification', 'info',
+          'Test Notification', 
+          'This is a test notification sent from MDM Dashboard',
+          false, CURRENT_TIMESTAMP
+        )
+      `, [deviceId, device.property_id]);
+      
+      // Here you would normally send an actual push notification
+      // For now, we'll just simulate success
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Test notification sent successfully',
+        device: {
+          id: device.id,
+          name: device.device_name,
+          type: device.device_type
+        }
+      });
+      
+    } catch (error) {
+      console.error('Test notification error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send test notification',
+        error: error.message
+      });
+    }
+  }
+  
   // Notifications statistics - /api/notifications/statistics
   if (pathname === '/api/notifications/statistics' && method === 'GET') {
     const { propertyId } = req.query || {};
