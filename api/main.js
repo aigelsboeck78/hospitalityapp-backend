@@ -96,6 +96,30 @@ export default async function handler(req, res) {
   }
   req.query = query;
   
+  // Parse body for POST/PUT/PATCH requests if needed
+  if (['POST', 'PUT', 'PATCH'].includes(method)) {
+    if (!req.body || (typeof req.body === 'object' && Object.keys(req.body).length === 0)) {
+      try {
+        const contentType = req.headers['content-type'] || '';
+        
+        // Only parse JSON bodies
+        if (contentType.includes('application/json')) {
+          const chunks = [];
+          for await (const chunk of req) {
+            chunks.push(chunk);
+          }
+          const bodyString = Buffer.concat(chunks).toString();
+          if (bodyString) {
+            req.body = JSON.parse(bodyString);
+          }
+        }
+      } catch (error) {
+        console.error('Body parsing error:', error);
+        // Continue without parsed body - endpoints can handle it
+      }
+    }
+  }
+  
   // Health check
   if (pathname === '/api/health' && method === 'GET') {
     return res.status(200).json({
@@ -1343,10 +1367,14 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
+      // Body should already be parsed
+      const body = req.body || {};
+      
       // Handle JSON request (URL or base64 upload)
-      const { imageUrl, title, season = 'all', uploadType = 'url' } = req.body;
+      const { imageUrl, title, season = 'all', uploadType = 'url' } = body;
       
       if (!imageUrl) {
+        console.error('No imageUrl in body:', JSON.stringify(body).substring(0, 100));
         await pool.end();
         return res.status(400).json({
           success: false,
@@ -1365,16 +1393,21 @@ export default async function handler(req, res) {
             message: 'Image too large. Please reduce file size to under 3MB'
           });
         }
+        console.log('Uploading base64 image, size:', (imageUrl.length / 1024 / 1024).toFixed(2), 'MB');
+      } else {
+        console.log('Uploading external URL:', imageUrl);
       }
       
       const result = await pool.query(
         `INSERT INTO background_images (property_id, image_url, title, season, upload_type)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [propertyId, imageUrl, title, season, uploadType]
+        [propertyId, imageUrl, title || null, season, uploadType]
       );
       
       await pool.end();
+      
+      console.log('Successfully uploaded background image:', result.rows[0].id);
       
       return res.status(201).json({
         success: true,
@@ -1382,10 +1415,12 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Background image upload error:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error details:', error.detail || error.message);
       await pool.end();
       return res.status(500).json({
         success: false,
-        message: 'Failed to upload background image'
+        message: `Failed to upload background image: ${error.message}`
       });
     }
   }
