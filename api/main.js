@@ -1437,10 +1437,10 @@ export default async function handler(req, res) {
     try {
       const result = await pool.query(`
         SELECT 
-          COUNT(*)::INTEGER as total,
-          COUNT(CASE WHEN DATE(start_date) = CURRENT_DATE THEN 1 END)::INTEGER as today,
-          COUNT(CASE WHEN start_date > CURRENT_DATE AND start_date <= CURRENT_DATE + INTERVAL '7 days' THEN 1 END)::INTEGER as upcoming,
-          COUNT(CASE WHEN is_featured = true THEN 1 END)::INTEGER as featured
+          COUNT(*) as total,
+          COUNT(CASE WHEN DATE(start_date) = CURRENT_DATE THEN 1 END) as today,
+          COUNT(CASE WHEN start_date > CURRENT_DATE AND start_date <= CURRENT_DATE + INTERVAL '7 days' THEN 1 END) as upcoming,
+          COUNT(CASE WHEN is_featured = true THEN 1 END) as featured
         FROM events
       `);
       await pool.end();
@@ -1452,10 +1452,13 @@ export default async function handler(req, res) {
         featured: 0
       };
       
-      // Convert bigint to number
+      // Convert bigint and string numbers to number
       Object.keys(stats).forEach(key => {
-        if (typeof stats[key] === 'bigint') {
-          stats[key] = Number(stats[key]);
+        const value = stats[key];
+        if (typeof value === 'bigint') {
+          stats[key] = Number(value);
+        } else if (typeof value === 'string' && !isNaN(value)) {
+          stats[key] = parseInt(value, 10);
         }
       });
       
