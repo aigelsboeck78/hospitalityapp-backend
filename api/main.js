@@ -2087,6 +2087,27 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
+      // Ensure table exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS dining_places (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          cuisine_type VARCHAR(100),
+          price_range VARCHAR(50),
+          location TEXT,
+          contact_phone VARCHAR(50),
+          website VARCHAR(255),
+          opening_hours JSONB,
+          image_url TEXT,
+          rating NUMERIC(3,2),
+          is_featured BOOLEAN DEFAULT false,
+          property_id UUID,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
       // List of known faulty domains
       const faultyDomains = [
         'cdn.fastenberg.at', 'media.obertal.at', 'media.preuneggtal.at',
