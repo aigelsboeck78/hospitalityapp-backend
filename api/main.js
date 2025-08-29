@@ -2265,6 +2265,259 @@ export default async function handler(req, res) {
     });
   }
   
+  // Property Information endpoints - GET /api/properties/:id/information
+  const propertyInfoMatch = pathname.match(/^\/api\/properties\/([^\/]+)\/information$/);
+  if (propertyInfoMatch && method === 'GET') {
+    const propertyId = propertyInfoMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'SELECT * FROM property_information WHERE property_id = $1 ORDER BY display_order, created_at',
+        [propertyId]
+      );
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error('Property information fetch error:', error);
+      await pool.end();
+      
+      // If table doesn't exist, return empty array
+      if (error.code === '42P01') {
+        return res.status(200).json({
+          success: true,
+          data: []
+        });
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch property information'
+      });
+    }
+  }
+  
+  // Create property information - POST /api/properties/:id/information
+  if (propertyInfoMatch && method === 'POST') {
+    const propertyId = propertyInfoMatch[1];
+    const pool = createPool();
+    
+    try {
+      const {
+        category = 'amenity',
+        type,
+        title,
+        description,
+        instructions,
+        icon = 'info',
+        url,
+        display_order = 0,
+        is_active = true,
+        metadata = {}
+      } = req.body;
+      
+      const result = await pool.query(
+        `INSERT INTO property_information 
+         (property_id, category, type, title, description, instructions, icon, url, display_order, is_active, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING *`,
+        [propertyId, category, type, title, description, instructions, icon, url, display_order, is_active, metadata]
+      );
+      
+      await pool.end();
+      
+      return res.status(201).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Property information create error:', error);
+      await pool.end();
+      
+      // Create table if it doesn't exist
+      if (error.code === '42P01') {
+        const createPool2 = createPool();
+        try {
+          await createPool2.query(`
+            CREATE TABLE property_information (
+              id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+              property_id UUID NOT NULL,
+              category VARCHAR(50) NOT NULL,
+              type VARCHAR(50),
+              title VARCHAR(255) NOT NULL,
+              description TEXT,
+              instructions TEXT,
+              icon VARCHAR(50),
+              url VARCHAR(500),
+              display_order INTEGER DEFAULT 0,
+              is_active BOOLEAN DEFAULT true,
+              metadata JSONB DEFAULT '{}',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          
+          // Try insert again
+          const result = await createPool2.query(
+            `INSERT INTO property_information 
+             (property_id, category, type, title, description, instructions, icon, url, display_order, is_active, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING *`,
+            [propertyId, category, type, title, description, instructions, icon, url, display_order, is_active, metadata]
+          );
+          
+          await createPool2.end();
+          
+          return res.status(201).json({
+            success: true,
+            data: result.rows[0]
+          });
+        } catch (createError) {
+          console.error('Table creation error:', createError);
+          await createPool2.end();
+        }
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create property information'
+      });
+    }
+  }
+  
+  // Update property information - PUT /api/property-info/:id
+  const updatePropertyInfoMatch = pathname.match(/^\/api\/property-info\/([^\/]+)$/);
+  if (updatePropertyInfoMatch && method === 'PUT') {
+    const infoId = updatePropertyInfoMatch[1];
+    const pool = createPool();
+    
+    try {
+      const {
+        category,
+        type,
+        title,
+        description,
+        instructions,
+        icon,
+        url,
+        display_order,
+        is_active,
+        metadata
+      } = req.body;
+      
+      const result = await pool.query(
+        `UPDATE property_information 
+         SET category = $1, type = $2, title = $3, description = $4, instructions = $5,
+             icon = $6, url = $7, display_order = $8, is_active = $9, metadata = $10,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $11
+         RETURNING *`,
+        [category, type, title, description, instructions, icon, url, display_order, is_active, metadata, infoId]
+      );
+      
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Property information not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Property information update error:', error);
+      await pool.end();
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update property information'
+      });
+    }
+  }
+  
+  // Delete property information - DELETE /api/property-info/:id
+  if (updatePropertyInfoMatch && method === 'DELETE') {
+    const infoId = updatePropertyInfoMatch[1];
+    const pool = createPool();
+    
+    try {
+      const result = await pool.query(
+        'DELETE FROM property_information WHERE id = $1 RETURNING *',
+        [infoId]
+      );
+      
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Property information not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Property information deleted successfully'
+      });
+    } catch (error) {
+      console.error('Property information delete error:', error);
+      await pool.end();
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete property information'
+      });
+    }
+  }
+  
+  // Update property information order - PUT /api/property-info/order
+  if (pathname === '/api/property-info/order' && method === 'PUT') {
+    const pool = createPool();
+    
+    try {
+      const { items } = req.body;
+      
+      if (!items || !Array.isArray(items)) {
+        await pool.end();
+        return res.status(400).json({
+          success: false,
+          message: 'Items array is required'
+        });
+      }
+      
+      // Update each item's display_order
+      for (let i = 0; i < items.length; i++) {
+        await pool.query(
+          'UPDATE property_information SET display_order = $1 WHERE id = $2',
+          [i, items[i].id]
+        );
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Order updated successfully'
+      });
+    } catch (error) {
+      console.error('Property information order update error:', error);
+      await pool.end();
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update order'
+      });
+    }
+  }
+  
   // Notifications statistics - /api/notifications/statistics
   if (pathname === '/api/notifications/statistics' && method === 'GET') {
     const { propertyId } = req.query || {};
