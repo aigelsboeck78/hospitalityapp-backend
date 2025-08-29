@@ -2504,8 +2504,22 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
+      // Ensure table exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS mdm_profiles (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          property_id UUID,
+          profile_name VARCHAR(255) NOT NULL,
+          profile_type VARCHAR(50),
+          profile_data JSONB,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
       const result = await pool.query(
-        'SELECT * FROM configuration_profiles WHERE property_id = $1 ORDER BY created_at DESC',
+        'SELECT * FROM mdm_profiles WHERE property_id = $1 ORDER BY created_at DESC',
         [propertyId]
       );
       await pool.end();
@@ -2530,6 +2544,24 @@ export default async function handler(req, res) {
     const pool = createPool();
     
     try {
+      // Ensure table exists first
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS mdm_alerts (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          device_id UUID,
+          property_id UUID,
+          alert_type VARCHAR(50) NOT NULL,
+          severity VARCHAR(20) DEFAULT 'info',
+          title VARCHAR(255) NOT NULL,
+          message TEXT,
+          metadata JSONB,
+          is_resolved BOOLEAN DEFAULT false,
+          resolved_at TIMESTAMP,
+          resolved_by VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
       let query = 'SELECT * FROM mdm_alerts WHERE 1=1';
       const params = [];
       
@@ -2557,7 +2589,8 @@ export default async function handler(req, res) {
       await pool.end();
       return res.status(500).json({
         success: false,
-        message: 'Failed to fetch MDM alerts'
+        message: 'Failed to fetch MDM alerts',
+        error: error.message
       });
     }
   }
