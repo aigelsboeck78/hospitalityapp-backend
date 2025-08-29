@@ -2569,17 +2569,61 @@ export default async function handler(req, res) {
     try {
       const { property_id } = req.query || {};
       
-      if (!property_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'Property ID required'
-        });
+      // Ensure table exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS property_settings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          property_id UUID,
+          company_name VARCHAR(255),
+          logo_url TEXT,
+          primary_color VARCHAR(7),
+          secondary_color VARCHAR(7),
+          default_language VARCHAR(10) DEFAULT 'en',
+          time_zone VARCHAR(50) DEFAULT 'Europe/Vienna',
+          check_in_time VARCHAR(10) DEFAULT '15:00',
+          check_out_time VARCHAR(10) DEFAULT '11:00',
+          auto_cleanup BOOLEAN DEFAULT true,
+          cleanup_interval INTEGER DEFAULT 24,
+          enable_tv_app BOOLEAN DEFAULT true,
+          enable_kiosk_mode BOOLEAN DEFAULT false,
+          enable_guest_messaging BOOLEAN DEFAULT true,
+          enable_analytics BOOLEAN DEFAULT true,
+          privacy_mode BOOLEAN DEFAULT false,
+          data_retention_days INTEGER DEFAULT 30,
+          notification_email VARCHAR(255),
+          sms_notifications BOOLEAN DEFAULT false,
+          push_notifications BOOLEAN DEFAULT true,
+          weather_api_key VARCHAR(255),
+          currency VARCHAR(3) DEFAULT 'EUR',
+          default_background_url TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
+      let result;
+      if (property_id) {
+        // Get settings for specific property
+        result = await pool.query(
+          'SELECT * FROM property_settings WHERE property_id = $1',
+          [property_id]
+        );
+      } else {
+        // Get global settings (property_id is NULL)
+        result = await pool.query(
+          'SELECT * FROM property_settings WHERE property_id IS NULL LIMIT 1'
+        );
+        
+        // If no global settings exist, create default
+        if (result.rows.length === 0) {
+          result = await pool.query(`
+            INSERT INTO property_settings (property_id, company_name, primary_color, secondary_color)
+            VALUES (NULL, 'Chalet Moments', '#3B82F6', '#1E40AF')
+            RETURNING *
+          `);
+        }
       }
       
-      const result = await pool.query(
-        'SELECT * FROM property_settings WHERE property_id = $1',
-        [property_id]
-      );
       await pool.end();
       
       return res.status(200).json({
@@ -2596,6 +2640,101 @@ export default async function handler(req, res) {
     }
   }
   
+  
+  // Update settings - PUT /api/settings
+  if (pathname === '/api/settings' && method === 'PUT') {
+    const pool = createPool();
+    
+    try {
+      const { property_id } = req.query || {};
+      const settings = req.body;
+      
+      // Remove property_id from settings to avoid overwriting
+      delete settings.property_id;
+      
+      // Build update query dynamically
+      const fields = Object.keys(settings);
+      if (fields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No settings to update'
+        });
+      }
+      
+      const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+      const values = fields.map(field => settings[field]);
+      
+      let query;
+      let queryValues;
+      
+      if (property_id) {
+        query = `
+          UPDATE property_settings 
+          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
+          WHERE property_id = $1
+          RETURNING *
+        `;
+        queryValues = [property_id, ...values];
+      } else {
+        // Update global settings
+        query = `
+          UPDATE property_settings 
+          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
+          WHERE property_id IS NULL
+          RETURNING *
+        `;
+        queryValues = [null, ...values];
+        
+        // First check if global settings exist
+        const existing = await pool.query(
+          'SELECT id FROM property_settings WHERE property_id IS NULL'
+        );
+        
+        if (existing.rows.length === 0) {
+          // Create if doesn't exist
+          const insertFields = [...fields, 'property_id'];
+          const insertPlaceholders = insertFields.map((_, i) => `$${i + 1}`).join(', ');
+          const insertQuery = `
+            INSERT INTO property_settings (${insertFields.join(', ')})
+            VALUES (${insertPlaceholders})
+            RETURNING *
+          `;
+          const result = await pool.query(insertQuery, [null, ...values]);
+          await pool.end();
+          
+          return res.status(200).json({
+            success: true,
+            data: result.rows[0],
+            message: 'Settings created successfully'
+          });
+        }
+      }
+      
+      const result = await pool.query(query, queryValues);
+      await pool.end();
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Settings not found'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0],
+        message: 'Settings updated successfully'
+      });
+      
+    } catch (error) {
+      console.error('Settings update error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update settings'
+      });
+    }
+  }
   
   // MDM profiles - /api/mdm/properties/:id/profiles
   const mdmProfilesMatch = pathname.match(/^\/api\/mdm\/properties\/([^\/]+)\/profiles$/);
