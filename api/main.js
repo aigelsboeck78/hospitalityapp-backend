@@ -1409,7 +1409,7 @@ export default async function handler(req, res) {
         token: process.env.BLOB_READ_WRITE_TOKEN
       });
       
-      console.log('Uploaded to Vercel Blob:', blob.url);
+      console.log('Successfully uploaded to Vercel Blob Storage:', blob.url);
       
       // Save the Vercel Blob URL to database
       const result = await pool.query(
