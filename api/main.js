@@ -1317,17 +1317,82 @@ export default async function handler(req, res) {
   
   // Create event - POST /api/events
   if (pathname === '/api/events' && method === 'POST') {
-    const pool = createPool();
+    let pool = null;
     
     try {
+      // Create pool with error handling
+      try {
+        pool = createPool();
+      } catch (poolError) {
+        console.error('Failed to create pool for event creation:', poolError);
+        return res.status(500).json({
+          success: false,
+          message: 'Database connection failed'
+        });
+      }
+      
       let { title, description, start_date, end_date, image_url, location, 
            event_type, price, booking_url, is_featured = false } = req.body;
       
+      console.log('Creating event:', { title, event_type, location });
+      
       // Auto-import image to Vercel Blob if it's an external URL
-      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
-        const timestamp = Date.now();
-        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
-        image_url = await importImageToBlob(image_url, 'events', filename);
+      try {
+        if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+          const timestamp = Date.now();
+          const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+          image_url = await importImageToBlob(image_url, 'events', filename);
+        }
+      } catch (imageError) {
+        console.error('Image import error (continuing with original URL):', imageError.message);
+        // Continue with the original image_url
+      }
+      
+      // First check if the events table exists
+      let tableExists = false;
+      try {
+        const tableCheck = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'events'
+          );
+        `);
+        tableExists = tableCheck.rows[0]?.exists || false;
+      } catch (tableError) {
+        console.error('Error checking events table:', tableError);
+        tableExists = false;
+      }
+      
+      if (!tableExists) {
+        // Try to create the events table
+        console.log('Events table not found, attempting to create it...');
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS events (
+              id SERIAL PRIMARY KEY,
+              title VARCHAR(255) NOT NULL,
+              description TEXT,
+              start_date TIMESTAMP NOT NULL,
+              end_date TIMESTAMP,
+              image_url TEXT,
+              location VARCHAR(255),
+              event_type VARCHAR(100),
+              price DECIMAL(10, 2),
+              booking_url TEXT,
+              is_featured BOOLEAN DEFAULT false,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          console.log('Events table created successfully');
+        } catch (createError) {
+          console.error('Failed to create events table:', createError);
+          if (pool) await pool.end();
+          return res.status(500).json({
+            success: false,
+            message: 'Events table not initialized'
+          });
+        }
       }
       
       const result = await pool.query(
@@ -1337,7 +1402,7 @@ export default async function handler(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [title, description, start_date, end_date, image_url, location,
-         event_type, price, booking_url, is_featured]
+         event_type, price, booking_url, is_featured || false]
       );
       
       await pool.end();
@@ -1348,10 +1413,23 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Event create error:', error);
-      await pool.end();
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail
+      });
+      
+      if (pool) {
+        try {
+          await pool.end();
+        } catch (e) {
+          // Ignore pool closing errors
+        }
+      }
+      
       return res.status(500).json({
         success: false,
-        message: 'Failed to create event'
+        message: error.message || 'Failed to create event'
       });
     }
   }
@@ -1391,17 +1469,58 @@ export default async function handler(req, res) {
   // Update event - PUT /api/events/:id
   if (singleEventMatch && method === 'PUT' && singleEventMatch[1] !== 'stats') {
     const eventId = singleEventMatch[1];
-    const pool = createPool();
+    let pool = null;
     
     try {
+      // Create pool with error handling
+      try {
+        pool = createPool();
+      } catch (poolError) {
+        console.error('Failed to create pool for event update:', poolError);
+        return res.status(500).json({
+          success: false,
+          message: 'Database connection failed'
+        });
+      }
+      
       let { title, description, start_date, end_date, image_url, location,
            event_type, price, booking_url, is_featured } = req.body;
       
+      console.log('Updating event:', eventId, { title, event_type, location });
+      
       // Auto-import image to Vercel Blob if it's an external URL
-      if (image_url && !image_url.includes('blob.vercel-storage.com')) {
-        const timestamp = Date.now();
-        const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
-        image_url = await importImageToBlob(image_url, 'events', filename);
+      try {
+        if (image_url && !image_url.includes('blob.vercel-storage.com')) {
+          const timestamp = Date.now();
+          const filename = `${timestamp}-${title?.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+          image_url = await importImageToBlob(image_url, 'events', filename);
+        }
+      } catch (imageError) {
+        console.error('Image import error (continuing with original URL):', imageError.message);
+        // Continue with the original image_url
+      }
+      
+      // First check if the events table exists
+      let tableExists = false;
+      try {
+        const tableCheck = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'events'
+          );
+        `);
+        tableExists = tableCheck.rows[0]?.exists || false;
+      } catch (tableError) {
+        console.error('Error checking events table:', tableError);
+        tableExists = false;
+      }
+      
+      if (!tableExists) {
+        if (pool) await pool.end();
+        return res.status(500).json({
+          success: false,
+          message: 'Events table not initialized'
+        });
       }
       
       const result = await pool.query(
@@ -1412,7 +1531,7 @@ export default async function handler(req, res) {
          WHERE id = $11
          RETURNING *`,
         [title, description, start_date, end_date, image_url, location,
-         event_type, price, booking_url, is_featured, eventId]
+         event_type, price, booking_url, is_featured || false, eventId]
       );
       
       if (result.rows.length === 0) {
@@ -1431,10 +1550,23 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Event update error:', error);
-      await pool.end();
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail
+      });
+      
+      if (pool) {
+        try {
+          await pool.end();
+        } catch (e) {
+          // Ignore pool closing errors
+        }
+      }
+      
       return res.status(500).json({
         success: false,
-        message: 'Failed to update event'
+        message: error.message || 'Failed to update event'
       });
     }
   }
