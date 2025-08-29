@@ -1323,33 +1323,119 @@ export default async function handler(req, res) {
       
       console.log('🔄 Starting event scraping process...');
       
-      // Get max pages from request body (default 3)
-      const { maxPages = 3 } = req.body || {};
+      // Get max pages from request body (default 1 for Vercel timeout constraints)
+      const { maxPages = 1 } = req.body || {};
       
       // Create scraper instance
       const scraper = new EnhancedEventScraperService();
       
-      // Start scraping in background (don't wait for completion)
-      const scrapePromise = scraper.scrapeEvents(maxPages).then(events => {
+      // Run scraping synchronously and wait for completion (within timeout limit)
+      try {
+        const events = await scraper.scrapeEvents(maxPages);
         console.log(`✅ Scraping completed: ${events.length} events processed`);
-        return events;
-      }).catch(error => {
-        console.error('❌ Scraping failed:', error);
-        return [];
-      });
-      
-      // Return immediately with success message
-      return res.status(200).json({
-        success: true,
-        message: `Scraping started for up to ${maxPages} pages. This may take a few minutes.`,
-        estimatedTime: `${maxPages * 30} seconds`
-      });
+        
+        return res.status(200).json({
+          success: true,
+          message: `Successfully scraped ${events.length} events from ${maxPages} page(s)`,
+          eventsCount: events.length
+        });
+      } catch (scrapeError) {
+        console.error('❌ Scraping failed:', scrapeError);
+        
+        // Try fallback: scrape without enhanced features
+        try {
+          console.log('Attempting basic scraping...');
+          const { EventScraperService } = await import('../src/services/eventScraperService.js');
+          const basicScraper = new EventScraperService();
+          const events = await basicScraper.scrapeEvents(1);
+          
+          return res.status(200).json({
+            success: true,
+            message: `Scraped ${events.length} events using basic scraper`,
+            eventsCount: events.length,
+            fallback: true
+          });
+        } catch (fallbackError) {
+          throw fallbackError;
+        }
+      }
       
     } catch (error) {
       console.error('Scrape endpoint error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Failed to start scraping process',
+        message: 'Failed to scrape events',
+        error: error.message
+      });
+    }
+  }
+  
+  // Quick scrape - GET /api/events/quick-scrape (for testing)
+  if (pathname === '/api/events/quick-scrape' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      console.log('🚀 Quick scrape - fetching sample events...');
+      
+      // Create some sample events for immediate testing
+      const sampleEvents = [
+        {
+          name: 'Schladming Night Race 2025',
+          description: 'World Cup Ski Racing under floodlights',
+          start_date: new Date('2025-01-28T18:00:00'),
+          location: 'Planai Stadium, Schladming',
+          category: 'sport',
+          image_url: 'https://www.schladming-dachstein.at/assets/images/nightrace.jpg',
+          is_featured: true
+        },
+        {
+          name: 'Dachstein Glacier Concert',
+          description: 'Classical music concert on the glacier at 2700m',
+          start_date: new Date('2025-09-15T11:00:00'),
+          location: 'Dachstein Glacier',
+          category: 'music',
+          image_url: 'https://www.schladming-dachstein.at/assets/images/glacier.jpg',
+          is_featured: true
+        },
+        {
+          name: 'Ramsau Farmers Market',
+          description: 'Traditional farmers market with local products',
+          start_date: new Date('2025-09-01T08:00:00'),
+          location: 'Ramsau Town Center',
+          category: 'market',
+          image_url: 'https://www.schladming-dachstein.at/assets/images/market.jpg'
+        }
+      ];
+      
+      let inserted = 0;
+      for (const event of sampleEvents) {
+        try {
+          await pool.query(
+            `INSERT INTO events (name, description, start_date, location, category, image_url, is_featured)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [event.name, event.description, event.start_date, event.location, 
+             event.category, event.image_url, event.is_featured || false]
+          );
+          inserted++;
+        } catch (e) {
+          console.error('Failed to insert event:', e.message);
+        }
+      }
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: `Quick scrape completed: ${inserted} sample events added`,
+        eventsAdded: inserted
+      });
+      
+    } catch (error) {
+      console.error('Quick scrape error:', error);
+      if (pool) await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Quick scrape failed',
         error: error.message
       });
     }
