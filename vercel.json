@@ -4,12 +4,20 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/auth/(.*)",
+      "destination": "/api/auth/[...auth]"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
   ],
   "functions": {
     "api/main.js": {
+      "maxDuration": 10,
+      "memory": 512
+    },
+    "api/auth/[...auth].js": {
       "maxDuration": 10,
       "memory": 512
     }
