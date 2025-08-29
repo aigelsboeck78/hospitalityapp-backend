@@ -153,6 +153,21 @@ export const config = {
 export default async function handler(req, res) {
   // Early check for events/stats to prevent any 500 errors
   const { url, method } = req;
+  
+  // Handle OPTIONS requests early for all endpoints
+  if (method === 'OPTIONS') {
+    try {
+      await runMiddleware(req, res, corsMiddleware);
+      return res.status(200).end();
+    } catch (e) {
+      // Fallback CORS headers if middleware fails
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      return res.status(200).end();
+    }
+  }
+  
   if (url && url.startsWith('/api/events/stats') && method === 'GET') {
     try {
       // Apply CORS for this specific endpoint
