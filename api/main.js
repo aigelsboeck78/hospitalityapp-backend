@@ -476,7 +476,7 @@ export default async function handler(req, res) {
       success: true,
       data: {
         id: 'guest_001',
-        propertyId: propertyId,
+        property_id: propertyId,
         firstName: 'John',
         lastName: 'Doe',
         checkInDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -508,6 +508,7 @@ export default async function handler(req, res) {
           price: 45.00,
           category: 'beverages',
           imageUrl: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800',
+          additionalImages: [],
           available: true
         },
         {
@@ -518,6 +519,7 @@ export default async function handler(req, res) {
           price: 120.00,
           category: 'wellness',
           imageUrl: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800',
+          additionalImages: [],
           available: true
         },
         {
@@ -528,6 +530,7 @@ export default async function handler(req, res) {
           price: 55.00,
           category: 'activities',
           imageUrl: 'https://images.unsplash.com/photo-1553978297-833d09932d31?w=800',
+          additionalImages: [],
           available: true
         }
       ],
@@ -546,21 +549,21 @@ export default async function handler(req, res) {
       success: true,
       data: [
         {
-          id: '1',
+          id: 1,
           url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&h=2160',
           title: 'Dachstein Glacier',
           description: 'Stunning views of the Dachstein Glacier',
           order: 1
         },
         {
-          id: '2',
+          id: 2,
           url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=3840&h=2160',
           title: 'Reiteralm Summer Meadows',
           description: 'Beautiful alpine meadows in summer',
           order: 2
         },
         {
-          id: '3',
+          id: 3,
           url: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=3840&h=2160',
           title: 'Enns Valley Panorama',
           description: 'Panoramic view of the Enns Valley',
@@ -615,6 +618,108 @@ export default async function handler(req, res) {
       ],
       total: 3
     });
+  }
+
+  // tvOS Activity Recommendations endpoint - GET /api/tvos/recommendations/activities
+  if (pathname === '/api/tvos/recommendations/activities' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: 'act_001',
+          name: 'Dachstein Ice Cave',
+          description: 'Explore the magical ice formations',
+          type: 'indoor',
+          duration: 120,
+          price: 35,
+          rating: 4.7,
+          imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800'
+        },
+        {
+          id: 'act_002',
+          name: 'Rittisberg Coaster',
+          description: 'Alpine roller coaster adventure',
+          type: 'outdoor',
+          duration: 60,
+          price: 15,
+          rating: 4.5,
+          imageUrl: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800'
+        }
+      ],
+      total: 2
+    });
+  }
+
+  // Dining Recommendations endpoint - GET /api/recommendations/dining
+  if (pathname === '/api/recommendations/dining' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: 'din_001',
+          name: 'Zum Stadttor',
+          cuisine: 'Austrian',
+          price_range: 3,
+          rating: 4.6,
+          distance: 1.2,
+          imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800'
+        },
+        {
+          id: 'din_002',
+          name: 'Die Tischlerei',
+          cuisine: 'Modern European',
+          price_range: 4,
+          rating: 4.8,
+          distance: 0.8,
+          imageUrl: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800'
+        }
+      ],
+      total: 2
+    });
+  }
+
+  // Event Recommendations endpoint - GET /api/recommendations/events
+  if (pathname === '/api/recommendations/events' && method === 'GET') {
+    const pool = createPool();
+    
+    try {
+      // Get today's events
+      const today = new Date().toISOString().split('T')[0];
+      const query = `
+        SELECT * FROM events 
+        WHERE start_date >= $1 
+        ORDER BY start_date ASC 
+        LIMIT 3
+      `;
+      
+      const result = await pool.query(query, [today]);
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: result.rows,
+        total: result.rows.length
+      });
+    } catch (error) {
+      console.error('Event recommendations fetch error:', error);
+      await pool.end();
+      
+      // Return mock data on error
+      return res.status(200).json({
+        success: true,
+        data: [
+          {
+            id: 'evt_001',
+            name: 'Alpine Music Festival',
+            description: 'Traditional Austrian music',
+            start_date: new Date().toISOString(),
+            location: 'Schladming Town Square',
+            imageUrl: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800'
+          }
+        ],
+        total: 1
+      });
+    }
   }
 
   // Weather recommendations endpoint
