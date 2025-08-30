@@ -2871,7 +2871,7 @@ export default async function handler(req, res) {
       
       // Get remaining devices
       const remainingResult = await pool.query(`
-        SELECT id, device_name, identifier, serial_number, computed_status
+        SELECT id, device_name, identifier, serial_number, device_status
         FROM devices 
         WHERE property_id = '41059600-402d-434e-9b34-2b4821f6e3a4'
       `);
