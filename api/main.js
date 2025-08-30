@@ -261,6 +261,7 @@ export default async function handler(req, res) {
       const device = {
         device_id: `device_${Date.now()}`,
         property_id,
+        property_name: 'Chalet 20',
         identifier: deviceId,
         device_name,
         model,
@@ -347,6 +348,7 @@ export default async function handler(req, res) {
         {
           id: '1',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
+          title: 'Planai Skiing',
           name: 'Planai Skiing',
           category: 'winter_sports',
           description: 'World-class skiing on Planai mountain',
@@ -356,6 +358,7 @@ export default async function handler(req, res) {
         {
           id: '2',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
+          title: 'Dachstein Glacier',
           name: 'Dachstein Glacier',
           category: 'sightseeing',
           description: 'Visit the eternal ice at Dachstein Glacier',
@@ -374,6 +377,7 @@ export default async function handler(req, res) {
         {
           id: '1',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
+          service_name: 'Netflix',
           name: 'Netflix',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
           is_active: true
@@ -381,6 +385,7 @@ export default async function handler(req, res) {
         {
           id: '2',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
+          service_name: 'Apple TV+',
           name: 'Apple TV+',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
           is_active: true
@@ -404,7 +409,7 @@ export default async function handler(req, res) {
             address: 'Talbach 1, 8970 Schladming',
             coordinates: { lat: 47.3947, lng: 13.6853 }
           },
-          rating: 4.5
+          rating: '4.5'
         },
         {
           id: '2',
@@ -416,7 +421,7 @@ export default async function handler(req, res) {
             address: 'Europaplatz 613, 8970 Schladming',
             coordinates: { lat: 47.3947, lng: 13.6853 }
           },
-          rating: 4.8
+          rating: '4.8'
         }
       ]
     });
@@ -432,6 +437,7 @@ export default async function handler(req, res) {
           temperature: 15,
           condition: 'partly_cloudy',
           description: 'Partly cloudy with mild temperatures',
+          icon: 'cloud.sun',
           humidity: 65,
           wind_speed: 10
         },
