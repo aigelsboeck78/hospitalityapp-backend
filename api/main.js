@@ -354,7 +354,8 @@ export default async function handler(req, res) {
           activity_type: 'outdoor',
           description: 'World-class skiing on Planai mountain',
           location: 'Schladming',
-          image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256'
+          image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256',
+          target_guest_types: ['families', 'couples', 'groups']
         },
         {
           id: '2',
@@ -365,7 +366,8 @@ export default async function handler(req, res) {
           activity_type: 'outdoor',
           description: 'Visit the eternal ice at Dachstein Glacier',
           location: 'Ramsau',
-          image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4'
+          image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4',
+          target_guest_types: ['families', 'couples', 'groups']
         }
       ]
     });
@@ -383,7 +385,8 @@ export default async function handler(req, res) {
           service_type: 'streaming',
           name: 'Netflix',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
-          is_active: true
+          is_active: true,
+          requires_login: true
         },
         {
           id: '2',
@@ -392,7 +395,8 @@ export default async function handler(req, res) {
           service_type: 'streaming',
           name: 'Apple TV+',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
-          is_active: true
+          is_active: true,
+          requires_login: true
         }
       ]
     });
@@ -438,6 +442,7 @@ export default async function handler(req, res) {
       success: true,
       data: {
         location: 'Schladming, Austria',
+        last_updated: new Date().toISOString(),
         current: {
           temperature: 15,
           condition: 'partly_cloudy',
