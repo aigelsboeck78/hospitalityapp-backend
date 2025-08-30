@@ -2834,6 +2834,128 @@ export default async function handler(req, res) {
     }
   }
   
+  // MDM reset endpoint - POST /api/mdm/reset
+  if (pathname === '/api/mdm/reset' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { action, adminKey } = req.body;
+      
+      // Verify admin key
+      if (adminKey !== 'mdm-init-2025') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid admin key'
+        });
+      }
+      
+      if (action === 'reset_tables') {
+        console.log('Resetting MDM tables...');
+        
+        // Drop existing tables
+        await pool.query('DROP TABLE IF EXISTS mdm_commands CASCADE');
+        await pool.query('DROP TABLE IF EXISTS mdm_alerts CASCADE');
+        await pool.query('DROP TABLE IF EXISTS mdm_device_status CASCADE');
+        await pool.query('DROP TABLE IF EXISTS mdm_profiles CASCADE');
+        
+        // Recreate with correct structure
+        await pool.query(`
+          CREATE TABLE mdm_profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            profile_name VARCHAR(255) NOT NULL,
+            profile_type VARCHAR(50),
+            profile_data JSONB,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(property_id, profile_name)
+          )
+        `);
+        
+        await pool.query(`
+          CREATE TABLE mdm_alerts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            alert_type VARCHAR(50) NOT NULL,
+            severity VARCHAR(20) DEFAULT 'info',
+            title VARCHAR(255) NOT NULL,
+            message TEXT,
+            metadata JSONB,
+            is_resolved BOOLEAN DEFAULT false,
+            resolved_at TIMESTAMP,
+            resolved_by VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        await pool.query(`
+          CREATE TABLE mdm_commands (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            command_type VARCHAR(50) NOT NULL,
+            command_data JSONB,
+            status VARCHAR(20) DEFAULT 'pending',
+            executed_at TIMESTAMP,
+            result JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        await pool.query(`
+          CREATE TABLE mdm_device_status (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE UNIQUE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            battery_level INTEGER,
+            storage_available BIGINT,
+            storage_total BIGINT,
+            network_status VARCHAR(50),
+            current_app VARCHAR(255),
+            screen_status VARCHAR(20),
+            kiosk_mode_active BOOLEAN DEFAULT false,
+            metadata JSONB,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        const tableCheck = await pool.query(`
+          SELECT table_name FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name IN ('mdm_profiles', 'mdm_alerts', 'mdm_commands', 'mdm_device_status')
+          ORDER BY table_name
+        `);
+        
+        await pool.end();
+        
+        return res.status(200).json({
+          success: true,
+          message: 'MDM tables reset successfully',
+          tables: tableCheck.rows.map(row => row.table_name)
+        });
+      }
+      
+      await pool.end();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid action'
+      });
+      
+    } catch (error) {
+      console.error('MDM reset error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to reset MDM tables',
+        error: error.message
+      });
+    }
+  }
+  
   // MDM initialization endpoint - POST /api/mdm/init
   if (pathname === '/api/mdm/init' && method === 'POST') {
     const pool = createPool();
