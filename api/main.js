@@ -372,7 +372,8 @@ export default async function handler(req, res) {
           target_guest_types: 'families,couples,groups',
           booking_required: false,
           is_active: true,
-          display_order: 1
+          display_order: 1,
+          created_at: new Date().toISOString()
         },
         {
           id: '2',
@@ -387,7 +388,8 @@ export default async function handler(req, res) {
           target_guest_types: 'families,couples,groups',
           booking_required: false,
           is_active: true,
-          display_order: 2
+          display_order: 2,
+          created_at: new Date().toISOString()
         }
       ]
     });
