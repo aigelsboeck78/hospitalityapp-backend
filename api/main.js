@@ -2993,21 +2993,22 @@ export default async function handler(req, res) {
           ADD COLUMN IF NOT EXISTS push_token VARCHAR(255)
         `);
         
-        // Insert default profile for Chalet 20
-        await pool.query(`
-          INSERT INTO mdm_profiles (
-            property_id,
-            profile_name,
-            profile_type,
-            profile_data,
-            is_active
-          ) VALUES (
-            '41059600-402d-434e-9b34-2b4821f6e3a4',
-            'Default Profile',
-            'standard',
-            $1,
-            true
-          ) ON CONFLICT (property_id, profile_name) DO NOTHING
+        // Insert default profile for Chalet 20 (skip if fails)
+        try {
+          await pool.query(`
+            INSERT INTO mdm_profiles (
+              property_id,
+              profile_name,
+              profile_type,
+              profile_data,
+              is_active
+            ) VALUES (
+              '41059600-402d-434e-9b34-2b4821f6e3a4',
+              'Default Profile',
+              'standard',
+              $1,
+              true
+            )
         `, [JSON.stringify({
           kiosk_mode: {
             enabled: false,
@@ -3026,6 +3027,9 @@ export default async function handler(req, res) {
             disable_app_removal: true
           }
         })]);
+        } catch (profileError) {
+          console.log('Default profile insert skipped:', profileError.message);
+        }
         
         // Verify tables were created
         const tableCheck = await pool.query(`
