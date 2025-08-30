@@ -236,19 +236,23 @@ export default async function handler(req, res) {
   // tvOS device registration endpoint (simplified version without database)
   if (pathname === '/api/tvos/device/register' && method === 'POST') {
     try {
+      // Handle both parameter naming conventions
       const {
-        property_id,
-        identifier,
+        property_id = '41059600-402d-434e-9b34-2b4821f6e3a4', // Default Chalet 20
+        identifier = req.body.device_identifier,
+        device_identifier,
         device_name = 'Apple TV',
         model,
         os_version,
         app_version
       } = req.body;
 
-      if (!property_id || !identifier) {
+      const deviceId = identifier || device_identifier;
+      
+      if (!deviceId) {
         return res.status(400).json({
           success: false,
-          message: 'property_id and identifier are required'
+          message: 'device_identifier is required'
         });
       }
 
@@ -257,7 +261,7 @@ export default async function handler(req, res) {
       const device = {
         id: `device_${Date.now()}`,
         property_id,
-        identifier,
+        identifier: deviceId,
         device_name,
         model,
         os_version,
@@ -314,6 +318,118 @@ export default async function handler(req, res) {
         message: 'Failed to authenticate device'
       });
     }
+  }
+  
+  // tvOS properties endpoint
+  if (pathname.match(/^\/api\/tvos\/properties\/([^\/]+)$/) && method === 'GET') {
+    const propertyId = pathname.split('/').pop();
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: propertyId,
+        name: 'Chalet 20',
+        address: 'Schladming, Austria',
+        description: 'Luxury mountain chalet with modern amenities',
+        amenities: ['WiFi', 'Smart TV', 'Kitchen', 'Sauna', 'Parking'],
+        check_in_time: '15:00',
+        check_out_time: '10:00'
+      }
+    });
+  }
+  
+  // tvOS activities endpoint
+  if (pathname === '/api/tvos/activities' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: '1',
+          name: 'Planai Skiing',
+          category: 'winter_sports',
+          description: 'World-class skiing on Planai mountain',
+          location: 'Schladming',
+          image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256'
+        },
+        {
+          id: '2',
+          name: 'Dachstein Glacier',
+          category: 'sightseeing',
+          description: 'Visit the eternal ice at Dachstein Glacier',
+          location: 'Ramsau',
+          image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4'
+        }
+      ]
+    });
+  }
+  
+  // tvOS streaming services endpoint
+  if (pathname === '/api/tvos/streaming-services' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: '1',
+          name: 'Netflix',
+          logo_url: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
+          is_active: true
+        },
+        {
+          id: '2',
+          name: 'Apple TV+',
+          logo_url: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
+          is_active: true
+        }
+      ]
+    });
+  }
+  
+  // tvOS dining endpoint
+  if (pathname === '/api/tvos/dining' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: '1',
+          name: 'Talbachschenke',
+          cuisine: 'Austrian',
+          description: 'Traditional Austrian cuisine',
+          location: 'Schladming',
+          rating: 4.5
+        },
+        {
+          id: '2',
+          name: 'Falkensteiner Hotel Restaurant',
+          cuisine: 'International',
+          description: 'Fine dining with mountain views',
+          location: 'Schladming',
+          rating: 4.8
+        }
+      ]
+    });
+  }
+  
+  // Weather recommendations endpoint
+  if (pathname === '/api/recommendations/weather' && method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      data: {
+        location: 'Schladming, Austria',
+        current: {
+          temperature: 15,
+          condition: 'partly_cloudy',
+          humidity: 65,
+          wind_speed: 10
+        },
+        forecast: [
+          {
+            date: new Date().toISOString(),
+            high: 18,
+            low: 10,
+            condition: 'sunny'
+          }
+        ]
+      }
+    });
   }
   
   // Health check endpoint to test database tables
