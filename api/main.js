@@ -321,6 +321,20 @@ export default async function handler(req, res) {
     }
   }
   
+  // MDM status endpoint
+  if (pathname.match(/^\/api\/mdm\/devices\/([^\/]+)\/status$/) && method === 'GET') {
+    const deviceId = pathname.split('/')[4];
+    return res.status(200).json({
+      success: true,
+      data: {
+        device_id: deviceId,
+        mdm_enrolled: true,
+        last_checkin: new Date().toISOString(),
+        status: 'active'
+      }
+    });
+  }
+  
   // tvOS properties endpoint
   if (pathname.match(/^\/api\/tvos\/properties\/([^\/]+)$/) && method === 'GET') {
     const propertyId = pathname.split('/').pop();
@@ -357,7 +371,8 @@ export default async function handler(req, res) {
           image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256',
           target_guest_types: 'families,couples,groups',
           booking_required: false,
-          is_active: true
+          is_active: true,
+          display_order: 1
         },
         {
           id: '2',
@@ -371,7 +386,8 @@ export default async function handler(req, res) {
           image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4',
           target_guest_types: 'families,couples,groups',
           booking_required: false,
-          is_active: true
+          is_active: true,
+          display_order: 2
         }
       ]
     });
