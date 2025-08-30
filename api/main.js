@@ -2834,6 +2834,70 @@ export default async function handler(req, res) {
     }
   }
   
+  // MDM cleanup endpoint - POST /api/mdm/cleanup
+  if (pathname === '/api/mdm/cleanup' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { adminKey, keepIdentifier } = req.body;
+      
+      // Verify admin key
+      if (adminKey !== 'mdm-init-2025') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid admin key'
+        });
+      }
+      
+      console.log('Cleaning up test devices...');
+      
+      // Delete all devices except the one with keepIdentifier
+      let deleteResult;
+      if (keepIdentifier) {
+        deleteResult = await pool.query(`
+          DELETE FROM devices 
+          WHERE property_id = '41059600-402d-434e-9b34-2b4821f6e3a4'
+          AND identifier != $1
+          RETURNING id, device_name, identifier
+        `, [keepIdentifier]);
+      } else {
+        deleteResult = await pool.query(`
+          DELETE FROM devices 
+          WHERE property_id = '41059600-402d-434e-9b34-2b4821f6e3a4'
+          AND (identifier LIKE 'TEST-%' OR serial_number LIKE 'TEST-%')
+          RETURNING id, device_name, identifier
+        `);
+      }
+      
+      // Get remaining devices
+      const remainingResult = await pool.query(`
+        SELECT id, device_name, identifier, serial_number, computed_status
+        FROM devices 
+        WHERE property_id = '41059600-402d-434e-9b34-2b4821f6e3a4'
+      `);
+      
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Test devices cleaned up',
+        deleted: deleteResult.rows,
+        deletedCount: deleteResult.rowCount,
+        remaining: remainingResult.rows,
+        remainingCount: remainingResult.rowCount
+      });
+      
+    } catch (error) {
+      console.error('MDM cleanup error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to cleanup devices',
+        error: error.message
+      });
+    }
+  }
+  
   // MDM reset endpoint - POST /api/mdm/reset
   if (pathname === '/api/mdm/reset' && method === 'POST') {
     const pool = createPool();
