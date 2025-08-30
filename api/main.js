@@ -2834,6 +2834,233 @@ export default async function handler(req, res) {
     }
   }
   
+  // MDM initialization endpoint - POST /api/mdm/init
+  if (pathname === '/api/mdm/init' && method === 'POST') {
+    const pool = createPool();
+    
+    try {
+      const { action, adminKey } = req.body;
+      
+      // Verify admin key
+      if (adminKey !== 'mdm-init-2025') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid admin key'
+        });
+      }
+      
+      if (action === 'initialize_tables') {
+        console.log('Initializing MDM tables...');
+        
+        // Create mdm_profiles table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS mdm_profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            profile_name VARCHAR(255) NOT NULL,
+            profile_type VARCHAR(50),
+            profile_data JSONB,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(property_id, profile_name)
+          )
+        `);
+        
+        // Create mdm_alerts table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS mdm_alerts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            alert_type VARCHAR(50) NOT NULL,
+            severity VARCHAR(20) DEFAULT 'info',
+            title VARCHAR(255) NOT NULL,
+            message TEXT,
+            metadata JSONB,
+            is_resolved BOOLEAN DEFAULT false,
+            resolved_at TIMESTAMP,
+            resolved_by VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        // Create mdm_commands table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS mdm_commands (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            command_type VARCHAR(50) NOT NULL,
+            command_data JSONB,
+            status VARCHAR(20) DEFAULT 'pending',
+            executed_at TIMESTAMP,
+            result JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        // Create mdm_device_status table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS mdm_device_status (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE UNIQUE,
+            property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            battery_level INTEGER,
+            storage_available BIGINT,
+            storage_total BIGINT,
+            network_status VARCHAR(50),
+            current_app VARCHAR(255),
+            screen_status VARCHAR(20),
+            kiosk_mode_active BOOLEAN DEFAULT false,
+            metadata JSONB,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        
+        // Create indexes
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_mdm_alerts_property_id 
+            ON mdm_alerts(property_id) WHERE is_resolved = false
+        `);
+        
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_mdm_alerts_device_id 
+            ON mdm_alerts(device_id)
+        `);
+        
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_mdm_commands_device_id 
+            ON mdm_commands(device_id) WHERE status = 'pending'
+        `);
+        
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_mdm_device_status_device_id 
+            ON mdm_device_status(device_id)
+        `);
+        
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_mdm_profiles_property_id 
+            ON mdm_profiles(property_id) WHERE is_active = true
+        `);
+        
+        // Create update trigger function
+        await pool.query(`
+          CREATE OR REPLACE FUNCTION update_updated_at_column()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+          END;
+          $$ language 'plpgsql'
+        `);
+        
+        // Apply triggers
+        await pool.query(`
+          DROP TRIGGER IF EXISTS update_mdm_profiles_updated_at ON mdm_profiles;
+          CREATE TRIGGER update_mdm_profiles_updated_at
+            BEFORE UPDATE ON mdm_profiles
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
+        
+        await pool.query(`
+          DROP TRIGGER IF EXISTS update_mdm_commands_updated_at ON mdm_commands;
+          CREATE TRIGGER update_mdm_commands_updated_at
+            BEFORE UPDATE ON mdm_commands
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
+        
+        await pool.query(`
+          DROP TRIGGER IF EXISTS update_mdm_device_status_updated_at ON mdm_device_status;
+          CREATE TRIGGER update_mdm_device_status_updated_at
+            BEFORE UPDATE ON mdm_device_status
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column()
+        `);
+        
+        // Add MDM columns to devices table
+        await pool.query(`
+          ALTER TABLE devices 
+          ADD COLUMN IF NOT EXISTS enrollment_status VARCHAR(50) DEFAULT 'not_enrolled',
+          ADD COLUMN IF NOT EXISTS enrollment_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS os_version VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS app_version VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS push_token VARCHAR(255)
+        `);
+        
+        // Insert default profile for Chalet 20
+        await pool.query(`
+          INSERT INTO mdm_profiles (
+            property_id,
+            profile_name,
+            profile_type,
+            profile_data,
+            is_active
+          ) VALUES (
+            '41059600-402d-434e-9b34-2b4821f6e3a4',
+            'Default Profile',
+            'standard',
+            $1,
+            true
+          ) ON CONFLICT (property_id, profile_name) DO NOTHING
+        `, [JSON.stringify({
+          kiosk_mode: {
+            enabled: false,
+            mode: "relaxed",
+            auto_return: true,
+            timeout: 300
+          },
+          allowed_apps: [
+            {bundleId: "com.netflix.Netflix", enabled: true},
+            {bundleId: "com.google.ios.youtube", enabled: true},
+            {bundleId: "com.disney.disneyplus", enabled: true}
+          ],
+          restrictions: {
+            disable_airplay: false,
+            disable_auto_lock: true,
+            disable_app_removal: true
+          }
+        })]);
+        
+        // Verify tables were created
+        const tableCheck = await pool.query(`
+          SELECT table_name FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name IN ('mdm_profiles', 'mdm_alerts', 'mdm_commands', 'mdm_device_status')
+          ORDER BY table_name
+        `);
+        
+        await pool.end();
+        
+        return res.status(200).json({
+          success: true,
+          message: 'MDM tables initialized successfully',
+          tables: tableCheck.rows.map(row => row.table_name)
+        });
+      }
+      
+      await pool.end();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid action'
+      });
+      
+    } catch (error) {
+      console.error('MDM initialization error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to initialize MDM tables',
+        error: error.message
+      });
+    }
+  }
+  
   // MDM heartbeat endpoint - POST /api/mdm/heartbeat
   if (pathname === '/api/mdm/heartbeat' && method === 'POST') {
     const pool = createPool();
