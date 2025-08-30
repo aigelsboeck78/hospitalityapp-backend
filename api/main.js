@@ -259,7 +259,7 @@ export default async function handler(req, res) {
       // For now, just return a successful registration without database
       // This allows the tvOS app to connect while we set up the database tables
       const device = {
-        id: `device_${Date.now()}`,
+        device_id: `device_${Date.now()}`,
         property_id,
         identifier: deviceId,
         device_name,
@@ -332,7 +332,9 @@ export default async function handler(req, res) {
         description: 'Luxury mountain chalet with modern amenities',
         amenities: ['WiFi', 'Smart TV', 'Kitchen', 'Sauna', 'Parking'],
         check_in_time: '15:00',
-        check_out_time: '10:00'
+        check_out_time: '10:00',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
     });
   }
@@ -344,6 +346,7 @@ export default async function handler(req, res) {
       data: [
         {
           id: '1',
+          property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           name: 'Planai Skiing',
           category: 'winter_sports',
           description: 'World-class skiing on Planai mountain',
@@ -352,6 +355,7 @@ export default async function handler(req, res) {
         },
         {
           id: '2',
+          property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           name: 'Dachstein Glacier',
           category: 'sightseeing',
           description: 'Visit the eternal ice at Dachstein Glacier',
@@ -369,12 +373,14 @@ export default async function handler(req, res) {
       data: [
         {
           id: '1',
+          property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           name: 'Netflix',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
           is_active: true
         },
         {
           id: '2',
+          property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           name: 'Apple TV+',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
           is_active: true
@@ -393,7 +399,11 @@ export default async function handler(req, res) {
           name: 'Talbachschenke',
           cuisine: 'Austrian',
           description: 'Traditional Austrian cuisine',
-          location: 'Schladming',
+          location: {
+            name: 'Schladming',
+            address: 'Talbach 1, 8970 Schladming',
+            coordinates: { lat: 47.3947, lng: 13.6853 }
+          },
           rating: 4.5
         },
         {
@@ -401,7 +411,11 @@ export default async function handler(req, res) {
           name: 'Falkensteiner Hotel Restaurant',
           cuisine: 'International',
           description: 'Fine dining with mountain views',
-          location: 'Schladming',
+          location: {
+            name: 'Schladming',
+            address: 'Europaplatz 613, 8970 Schladming',
+            coordinates: { lat: 47.3947, lng: 13.6853 }
+          },
           rating: 4.8
         }
       ]
@@ -417,6 +431,7 @@ export default async function handler(req, res) {
         current: {
           temperature: 15,
           condition: 'partly_cloudy',
+          description: 'Partly cloudy with mild temperatures',
           humidity: 65,
           wind_speed: 10
         },
