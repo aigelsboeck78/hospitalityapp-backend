@@ -351,6 +351,7 @@ export default async function handler(req, res) {
           title: 'Planai Skiing',
           name: 'Planai Skiing',
           category: 'winter_sports',
+          activity_type: 'outdoor',
           description: 'World-class skiing on Planai mountain',
           location: 'Schladming',
           image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256'
@@ -361,6 +362,7 @@ export default async function handler(req, res) {
           title: 'Dachstein Glacier',
           name: 'Dachstein Glacier',
           category: 'sightseeing',
+          activity_type: 'outdoor',
           description: 'Visit the eternal ice at Dachstein Glacier',
           location: 'Ramsau',
           image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4'
@@ -378,6 +380,7 @@ export default async function handler(req, res) {
           id: '1',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           service_name: 'Netflix',
+          service_type: 'streaming',
           name: 'Netflix',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
           is_active: true
@@ -386,6 +389,7 @@ export default async function handler(req, res) {
           id: '2',
           property_id: '41059600-402d-434e-9b34-2b4821f6e3a4',
           service_name: 'Apple TV+',
+          service_type: 'streaming',
           name: 'Apple TV+',
           logo_url: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
           is_active: true
@@ -398,6 +402,7 @@ export default async function handler(req, res) {
   if (pathname === '/api/tvos/dining' && method === 'GET') {
     return res.status(200).json({
       success: true,
+      total: 2,
       data: [
         {
           id: '1',
@@ -444,9 +449,11 @@ export default async function handler(req, res) {
         forecast: [
           {
             date: new Date().toISOString(),
+            day: 'Today',
             high: 18,
             low: 10,
-            condition: 'sunny'
+            condition: 'sunny',
+            icon: 'sun.max'
           }
         ]
       }
