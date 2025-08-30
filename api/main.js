@@ -233,6 +233,105 @@ export default async function handler(req, res) {
     });
   }
   
+  // tvOS device registration endpoint
+  if (pathname === '/api/tvos/device/register' && method === 'POST') {
+    const pool = createPool();
+    try {
+      const {
+        property_id,
+        identifier,
+        device_name = 'Apple TV',
+        model,
+        os_version,
+        app_version
+      } = req.body;
+
+      if (!property_id || !identifier) {
+        return res.status(400).json({
+          success: false,
+          message: 'property_id and identifier are required'
+        });
+      }
+
+      // Check if device exists
+      const existingDevice = await pool.query(
+        'SELECT * FROM property_devices WHERE identifier = $1 AND property_id = $2',
+        [identifier, property_id]
+      );
+
+      let device;
+      if (existingDevice.rows.length > 0) {
+        // Update existing device
+        device = await pool.query(
+          `UPDATE property_devices 
+           SET device_name = $3, model = $4, os_version = $5, app_version = $6, 
+               last_connected = NOW(), is_active = true
+           WHERE identifier = $1 AND property_id = $2
+           RETURNING *`,
+          [identifier, property_id, device_name, model, os_version, app_version]
+        );
+      } else {
+        // Create new device
+        device = await pool.query(
+          `INSERT INTO property_devices 
+           (property_id, identifier, device_name, model, os_version, app_version, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, true)
+           RETURNING *`,
+          [property_id, identifier, device_name, model, os_version, app_version]
+        );
+      }
+
+      await pool.end();
+      
+      return res.status(200).json({
+        success: true,
+        data: device.rows[0]
+      });
+    } catch (error) {
+      console.error('Device registration error:', error);
+      await pool.end();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to register device'
+      });
+    }
+  }
+
+  // tvOS device authentication endpoint
+  if (pathname === '/api/tvos/auth/device' && method === 'POST') {
+    try {
+      const { deviceId, propertyId } = req.body;
+      
+      if (!deviceId || !propertyId) {
+        return res.status(400).json({
+          success: false,
+          message: 'deviceId and propertyId are required'
+        });
+      }
+      
+      // Create a session token for the device
+      const sessionId = `tvos_${deviceId}_${Date.now()}`;
+      
+      return res.status(200).json({
+        success: true,
+        data: {
+          sessionId,
+          deviceId,
+          propertyId,
+          accessToken: sessionId,
+          expiresIn: 86400, // 24 hours
+          tokenType: 'Bearer'
+        }
+      });
+    } catch (error) {
+      console.error('Device auth error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to authenticate device'
+      });
+    }
+  }
+  
   // Health check endpoint to test database tables
   if (pathname === '/api/health/auth' && method === 'GET') {
     const pool = createPool();
