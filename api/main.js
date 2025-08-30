@@ -356,7 +356,8 @@ export default async function handler(req, res) {
           location: 'Schladming',
           image_url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256',
           target_guest_types: 'families,couples,groups',
-          booking_required: false
+          booking_required: false,
+          is_active: true
         },
         {
           id: '2',
@@ -369,7 +370,8 @@ export default async function handler(req, res) {
           location: 'Ramsau',
           image_url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4',
           target_guest_types: 'families,couples,groups',
-          booking_required: false
+          booking_required: false,
+          is_active: true
         }
       ]
     });
@@ -390,7 +392,8 @@ export default async function handler(req, res) {
           is_active: true,
           requires_login: true,
           display_order: 1,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         },
         {
           id: '2',
@@ -402,7 +405,8 @@ export default async function handler(req, res) {
           is_active: true,
           requires_login: true,
           display_order: 2,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
       ]
     });
