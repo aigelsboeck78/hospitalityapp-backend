@@ -373,7 +373,8 @@ export default async function handler(req, res) {
           booking_required: false,
           is_active: true,
           display_order: 1,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         },
         {
           id: '2',
@@ -389,7 +390,8 @@ export default async function handler(req, res) {
           booking_required: false,
           is_active: true,
           display_order: 2,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
       ]
     });
