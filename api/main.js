@@ -466,6 +466,157 @@ export default async function handler(req, res) {
     });
   }
   
+  // tvOS Current Guest endpoint - GET /api/tvos/guests/current/:propertyId
+  const tvosCurrentGuestMatch = pathname.match(/^\/api\/tvos\/guests\/current\/([^\/]+)$/);
+  if (tvosCurrentGuestMatch && method === 'GET') {
+    const propertyId = tvosCurrentGuestMatch[1];
+    
+    // Return mock guest data for now
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: 'guest_001',
+        propertyId: propertyId,
+        firstName: 'John',
+        lastName: 'Doe',
+        checkInDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        checkOutDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        roomNumber: '101',
+        preferences: {
+          language: 'en',
+          temperature: 22,
+          activities: ['skiing', 'hiking', 'wellness']
+        }
+      }
+    });
+  }
+
+  // tvOS Shop Products endpoint - GET /api/shop/tvos/properties/:propertyId/products
+  const tvosShopProductsMatch = pathname.match(/^\/api\/shop\/tvos\/properties\/([^\/]+)\/products$/);
+  if (tvosShopProductsMatch && method === 'GET') {
+    const propertyId = tvosShopProductsMatch[1];
+    
+    // Return shop products for tvOS
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: 'prod_001',
+          propertyId: propertyId,
+          name: 'Local Wine Selection',
+          description: 'Curated selection of regional wines',
+          price: 45.00,
+          category: 'beverages',
+          imageUrl: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800',
+          available: true
+        },
+        {
+          id: 'prod_002',
+          propertyId: propertyId,
+          name: 'Spa Treatment Voucher',
+          description: 'Relaxing spa treatment at our wellness center',
+          price: 120.00,
+          category: 'wellness',
+          imageUrl: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800',
+          available: true
+        },
+        {
+          id: 'prod_003',
+          propertyId: propertyId,
+          name: 'Mountain Bike Rental',
+          description: 'Full day mountain bike rental',
+          price: 55.00,
+          category: 'activities',
+          imageUrl: 'https://images.unsplash.com/photo-1553978297-833d09932d31?w=800',
+          available: true
+        }
+      ],
+      total: 3
+    });
+  }
+
+  // tvOS Background images endpoint - GET /api/tvos/properties/:id/backgrounds
+  const tvosBackgroundsMatch = pathname.match(/^\/api\/tvos\/properties\/([^\/]+)\/backgrounds$/);
+  if (tvosBackgroundsMatch && method === 'GET') {
+    const propertyId = tvosBackgroundsMatch[1];
+    
+    // For now, return mock background images for tvOS
+    // In production, this would fetch from the property_background_images table
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: '1',
+          url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&h=2160',
+          title: 'Dachstein Glacier',
+          description: 'Stunning views of the Dachstein Glacier',
+          order: 1
+        },
+        {
+          id: '2',
+          url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=3840&h=2160',
+          title: 'Reiteralm Summer Meadows',
+          description: 'Beautiful alpine meadows in summer',
+          order: 2
+        },
+        {
+          id: '3',
+          url: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=3840&h=2160',
+          title: 'Enns Valley Panorama',
+          description: 'Panoramic view of the Enns Valley',
+          order: 3
+        }
+      ]
+    });
+  }
+
+  // tvOS Recommendations endpoint - GET /api/tvos/properties/:id/recommendations
+  const tvosRecommendationsMatch = pathname.match(/^\/api\/tvos\/properties\/([^\/]+)\/recommendations$/);
+  if (tvosRecommendationsMatch && method === 'GET') {
+    const propertyId = tvosRecommendationsMatch[1];
+    
+    // Return recommendations for tvOS
+    return res.status(200).json({
+      success: true,
+      data: [
+        {
+          id: '1',
+          type: 'activity',
+          title: 'Dachstein Glacier Tour',
+          description: 'Experience the eternal ice at 2,700m altitude',
+          imageUrl: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080',
+          category: 'Adventure',
+          rating: 4.8,
+          distance: '15 km',
+          duration: '4 hours'
+        },
+        {
+          id: '2',
+          type: 'dining',
+          title: 'Talbachschenke Restaurant',
+          description: 'Traditional Austrian cuisine with local specialties',
+          imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1920&h=1080',
+          category: 'Dining',
+          rating: 4.5,
+          distance: '2 km',
+          cuisine: 'Austrian'
+        },
+        {
+          id: '3',
+          type: 'wellness',
+          title: 'Erlebnisbad Schladming',
+          description: 'Relax in the spa and wellness center',
+          imageUrl: 'https://images.unsplash.com/photo-1583416750470-965b2707b355?w=1920&h=1080',
+          category: 'Wellness',
+          rating: 4.6,
+          distance: '3 km',
+          facilities: ['Sauna', 'Pool', 'Massage']
+        }
+      ],
+      total: 3
+    });
+  }
+
   // Weather recommendations endpoint
   if (pathname === '/api/recommendations/weather' && method === 'GET') {
     return res.status(200).json({
@@ -1785,7 +1936,8 @@ export default async function handler(req, res) {
       
       return res.status(200).json({
         success: true,
-        data: result.rows
+        data: result.rows,
+        total: result.rows.length
       });
     } catch (error) {
       console.error('Events fetch error:', error);
